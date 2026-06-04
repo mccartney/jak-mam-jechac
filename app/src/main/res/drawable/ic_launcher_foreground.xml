@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple bus glyph centred in the 108dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="30" android:translateY="30">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M9,4C5,4 2,5 2,9V31C2,32.7 2.9,34.2 4,35.2V39A2,2 0,0 0,6 41H8A2,2 0,0 0,10 39V36H38V39A2,2 0,0 0,40 41H42A2,2 0,0 0,44 39V35.2C45.1,34.2 46,32.7 46,31V9C46,5 43,4 39,4ZM8.5,28A2.5,2.5 0,1 1,6 30.5A2.5,2.5 0,0 1,8.5 28ZM39.5,28A2.5,2.5 0,1 1,37 30.5A2.5,2.5 0,0 1,39.5 28ZM6,9H42V22H6Z" />
+    </group>
+</vector>
