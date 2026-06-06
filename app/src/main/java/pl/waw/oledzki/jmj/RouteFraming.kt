@@ -7,6 +7,7 @@ import org.maplibre.android.geometry.LatLng
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.ln
 
 private const val M_PER_DEG_LAT = 111_320.0
 
@@ -32,9 +33,11 @@ class RouteFraming private constructor(
         val key: Int,           // index of the next stop; identifies the current segment
     )
 
-    fun select(location: Location): Selection? {
+    fun select(location: Location): Selection? = select(location.latitude, location.longitude)
+
+    fun select(lat: Double, lon: Double): Selection? {
         if (stops.size < 2) return null
-        val s = arcLengthOf(path, cum, ref, location.latitude, location.longitude)
+        val s = arcLengthOf(path, cum, ref, lat, lon)
         var k = stopArc.indexOfFirst { it > s }
         if (k < 0) k = stops.lastIndex     // past the last stop
         if (k == 0) k = 1                  // before the first stop
@@ -49,9 +52,32 @@ class RouteFraming private constructor(
     }
 
     companion object {
-        fun load(context: Context): RouteFraming {
-            val pathLL = readLineString(context, R.raw.shape_504_kabaty_centralny)
-            val stops = readPoints(context, R.raw.stops_504_kabaty_centralny)
+        /**
+         * Zoom that makes a [spanMeters] gap fill [fraction] of a [heightDp]-tall
+         * viewport, given the map's current [zoom] and its [metersPerPixel] at that
+         * zoom. Pure (no map/Android state) so the framing maths can be unit-tested;
+         * clamped to MapLibre's sane street-level range.
+         */
+        fun zoomForSpan(
+            zoom: Double,
+            metersPerPixel: Double,
+            spanMeters: Double,
+            heightDp: Double,
+            fraction: Double,
+        ): Double {
+            val mppWanted = spanMeters / (fraction * heightDp)
+            return (zoom + ln(metersPerPixel / mppWanted) / ln(2.0)).coerceIn(11.0, 18.0)
+        }
+
+        fun load(context: Context): RouteFraming = fromGeoJson(
+            readRaw(context, R.raw.shape_504_kabaty_centralny),
+            readRaw(context, R.raw.stops_504_kabaty_centralny),
+        )
+
+        /** Builds the framing straight from GeoJSON text — the testable seam behind [load]. */
+        fun fromGeoJson(routeGeoJson: String, stopsGeoJson: String): RouteFraming {
+            val pathLL = readLineString(routeGeoJson)
+            val stops = readPoints(stopsGeoJson)
             val ref = pathLL.first()
             val path = ArrayList<DoubleArray>(pathLL.size)
             val cum = DoubleArray(pathLL.size)
@@ -94,23 +120,22 @@ class RouteFraming private constructor(
             return bestArc
         }
 
-        private fun readLineString(context: Context, resId: Int): List<LatLng> {
-            val coords = readJson(context, resId).getJSONObject("geometry").getJSONArray("coordinates")
+        private fun readLineString(geoJson: String): List<LatLng> {
+            val coords = JSONObject(geoJson).getJSONObject("geometry").getJSONArray("coordinates")
             return (0 until coords.length()).map {
                 val c = coords.getJSONArray(it); LatLng(c.getDouble(1), c.getDouble(0))
             }
         }
 
-        private fun readPoints(context: Context, resId: Int): List<LatLng> {
-            val feats = readJson(context, resId).getJSONArray("features")
+        private fun readPoints(geoJson: String): List<LatLng> {
+            val feats = JSONObject(geoJson).getJSONArray("features")
             return (0 until feats.length()).map {
                 val c = feats.getJSONObject(it).getJSONObject("geometry").getJSONArray("coordinates")
                 LatLng(c.getDouble(1), c.getDouble(0))
             }
         }
 
-        private fun readJson(context: Context, resId: Int) = JSONObject(
-            context.resources.openRawResource(resId).bufferedReader().use { it.readText() },
-        )
+        private fun readRaw(context: Context, resId: Int) =
+            context.resources.openRawResource(resId).bufferedReader().use { it.readText() }
     }
 }

@@ -42,7 +42,6 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
-import kotlin.math.ln
 
 // OpenFreeMap's "Liberty" vector style — no API key, no usage limits.
 private const val OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
@@ -173,8 +172,9 @@ private fun enableLocation(map: MapLibreMap, style: Style, context: Context): Lo
  */
 private fun frameStops(map: MapLibreMap, sel: RouteFraming.Selection, heightDp: Float): CameraPosition {
     val mppNow = map.projection.getMetersPerPixelAtLatitude(sel.target.latitude)
-    val mppWanted = sel.spanMeters / (FRAME_FRACTION * heightDp)
-    val zoom = (map.cameraPosition.zoom + ln(mppNow / mppWanted) / ln(2.0)).coerceIn(11.0, 18.0)
+    val zoom = RouteFraming.zoomForSpan(
+        map.cameraPosition.zoom, mppNow, sel.spanMeters, heightDp.toDouble(), FRAME_FRACTION,
+    )
     return CameraPosition.Builder()
         .target(sel.target)
         .zoom(zoom)
