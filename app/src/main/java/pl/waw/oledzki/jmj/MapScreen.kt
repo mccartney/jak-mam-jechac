@@ -35,6 +35,7 @@ import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.location.permissions.PermissionsManager
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
@@ -224,10 +225,19 @@ private fun rememberMapViewWithLifecycle(): MapView {
     // MapLibre must be initialised before any MapView is constructed.
     val mapView = remember {
         MapLibre.getInstance(context)
-        MapView(context).apply { onCreate(null) }
+        // Render into a TextureView, not the default SurfaceView. A SurfaceView owns a
+        // separate window whose surface lifecycle is independent of the Compose view
+        // tree, so when this AndroidView is re-mounted (navigate map → back → map) the
+        // surface can fail to recreate in time and the map shows blank. TextureView
+        // draws inside the normal view hierarchy and survives re-mounting reliably.
+        val options = MapLibreMapOptions.createFromAttributes(context, null).textureMode(true)
+        MapView(context, options).apply { onCreate(null) }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, mapView) {
+        // addObserver brings a newly-added observer up to the host's current state, so
+        // a map mounted into an already-resumed activity (navigated here from the
+        // brigade screen) still receives ON_START/ON_RESUME and starts rendering.
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> mapView.onStart()
