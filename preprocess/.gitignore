@@ -1,0 +1,5 @@
+# Never commit the GTFS feed or the generated output — only the script lives here.
+out/
+*.zip
+*.txt
+!requirements*.txt
