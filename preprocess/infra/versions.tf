@@ -6,6 +6,17 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # Remote state in a private, versioned bucket (created out-of-band so that
+  # `tofu destroy` can never delete the bucket holding its own state).
+  # use_lockfile = native S3 state locking, no DynamoDB needed (OpenTofu >= 1.10).
+  backend "s3" {
+    bucket       = "jak-mam-jechac-tfstate"
+    key          = "infra/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {
