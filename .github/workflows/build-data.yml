@@ -1,0 +1,52 @@
+name: build-data
+
+# Rebuild the per-line JSON from the daily mkuran feed and publish to S3.
+on:
+  schedule:
+    - cron: "0 3 * * *" # daily, after mkuran's ~00:15 UTC rebuild
+  workflow_dispatch: {} # manual run from the Actions tab
+
+# OIDC: no stored AWS keys — the job assumes the deploy role for temp creds.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: build-data
+  cancel-in-progress: true
+
+env:
+  BUCKET: jak-mam-jechac-data
+  AWS_REGION: eu-central-1
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::214582020536:role/jak-mam-jechac-ci-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download feed
+        run: curl -fsSL -o warsaw.zip https://mkuran.pl/gtfs/warsaw.zip
+
+      - name: Build per-line JSON
+        run: python3 preprocess/build.py --feed warsaw.zip --out out
+
+      # Store objects gzip-compressed under their .json keys; the app sends
+      # Accept-Encoding and S3 returns them with Content-Encoding: gzip.
+      - name: Gzip in place
+        run: |
+          for f in out/manifest.json out/lines/*.json; do
+            gzip -c "$f" > "$f.gz" && mv "$f.gz" "$f"
+          done
+
+      - name: Publish to S3
+        run: |
+          aws s3 sync out/ "s3://$BUCKET/" --delete \
+            --content-type application/json \
+            --content-encoding gzip \
+            --cache-control "public, max-age=3600"
