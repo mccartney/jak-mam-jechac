@@ -23,12 +23,13 @@ class MainActivity : ComponentActivity() {
                     // Pick a brigade first; once chosen, show the map. (The map still
                     // draws the hard-coded 504 until the data layer is wired in.)
                     var selection by remember { mutableStateOf<BrigadeSelection?>(null) }
-                    if (selection == null) {
+                    val current = selection
+                    if (current == null) {
                         BrigadeSelectScreen(Modifier.padding(padding)) { selection = it }
                     } else {
                         // Back returns to brigade selection instead of leaving the app.
                         BackHandler { selection = null }
-                        MapScreen(Modifier.padding(padding))
+                        MapScreen(current, Modifier.padding(padding))
                     }
                 }
             }

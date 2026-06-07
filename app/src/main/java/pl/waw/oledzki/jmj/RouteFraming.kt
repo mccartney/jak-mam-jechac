@@ -1,6 +1,5 @@
 package pl.waw.oledzki.jmj
 
-import android.content.Context
 import android.location.Location
 import org.json.JSONObject
 import org.maplibre.android.geometry.LatLng
@@ -69,12 +68,7 @@ class RouteFraming private constructor(
             return (zoom + ln(metersPerPixel / mppWanted) / ln(2.0)).coerceIn(11.0, 18.0)
         }
 
-        fun load(context: Context): RouteFraming = fromGeoJson(
-            readRaw(context, R.raw.shape_504_kabaty_centralny),
-            readRaw(context, R.raw.stops_504_kabaty_centralny),
-        )
-
-        /** Builds the framing straight from GeoJSON text — the testable seam behind [load]. */
+        /** Builds the framing straight from a trip's GeoJSON (line + stops). */
         fun fromGeoJson(routeGeoJson: String, stopsGeoJson: String): RouteFraming {
             val pathLL = readLineString(routeGeoJson)
             val stops = readPoints(stopsGeoJson)
@@ -134,8 +128,5 @@ class RouteFraming private constructor(
                 LatLng(c.getDouble(1), c.getDouble(0))
             }
         }
-
-        private fun readRaw(context: Context, resId: Int) =
-            context.resources.openRawResource(resId).bufferedReader().use { it.readText() }
     }
 }

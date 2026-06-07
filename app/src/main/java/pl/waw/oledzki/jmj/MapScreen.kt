@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.os.Looper
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -54,14 +55,16 @@ private const val DRIVER_ZOOM = 15.5
 // (3/4 → previous stop at 7/8·h, next stop at 1/8·h).
 private const val FRAME_FRACTION = 0.75
 private const val CAMERA_ANIM_MS = 800
-// One hard-coded 504 half-trip (Os. Kabaty → Dw. Centralny, shape 3:1840) for now.
-private const val ROUTE_SOURCE_ID = "route-504"
-private const val ROUTE_LAYER_ID = "route-504-line"
-private const val STOPS_SOURCE_ID = "stops-504"
-private const val STOPS_LAYER_ID = "stops-504-circles"
+private const val ROUTE_SOURCE_ID = "route"
+private const val ROUTE_LAYER_ID = "route-line"
+private const val STOPS_SOURCE_ID = "stops"
+private const val STOPS_LAYER_ID = "stops-circles"
+
+/** The fetched trip ready to render: its GeoJSON for the map layers + framing for the camera. */
+private class RouteData(val routeGeoJson: String, val stopsGeoJson: String, val framing: RouteFraming)
 
 @Composable
-fun MapScreen(modifier: Modifier = Modifier) {
+fun MapScreen(selection: BrigadeSelection, modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
     var locationGranted by remember {
@@ -83,7 +86,10 @@ fun MapScreen(modifier: Modifier = Modifier) {
     }
 
     val mapView = rememberMapViewWithLifecycle()
-    val framing = remember { RouteFraming.load(context) }
+
+    // Fetch the selected brigade's trip from S3 (cached to disk for dead zones).
+    var route by remember { mutableStateOf<RouteData?>(null) }
+    LaunchedEffect(selection) { route = loadRoute(context, selection) }
 
     // Holds the map + loaded style once both are ready, so the location effect
     // below can react to permission being granted at any time.
@@ -94,19 +100,24 @@ fun MapScreen(modifier: Modifier = Modifier) {
             getMapAsync { map ->
                 map.cameraPosition =
                     CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
-                map.setStyle(OPENFREEMAP_STYLE) { style ->
-                    addRouteShape(style, context)
-                    addRouteStops(style, context)
-                    ready = map to style
-                }
+                map.setStyle(OPENFREEMAP_STYLE) { style -> ready = map to style }
             }
         }
     })
 
+    // Draw the route once both the style and the fetched data are available.
+    LaunchedEffect(ready, route) {
+        val (_, style) = ready ?: return@LaunchedEffect
+        val r = route ?: return@LaunchedEffect
+        addRouteShape(style, r.routeGeoJson)
+        addRouteStops(style, r.stopsGeoJson)
+    }
+
     // Once the map is ready and permission is granted, start our own location
     // updates: move the puck and re-frame the camera each fix.
-    DisposableEffect(ready, locationGranted) {
+    DisposableEffect(ready, route, locationGranted) {
         val (map, _) = ready ?: return@DisposableEffect onDispose {}
+        val framing = route?.framing ?: return@DisposableEffect onDispose {}
         if (!locationGranted) return@DisposableEffect onDispose {}
         val component = enableLocation(map, ready!!.second, context)
         val engine = LocationEngineDefault.getDefaultLocationEngine(context)
@@ -184,16 +195,34 @@ private fun frameStops(map: MapLibreMap, sel: RouteFraming.Selection, heightDp: 
         .build()
 }
 
-/** Draws the hard-coded 504 route shape (loaded from res/raw) as a line on the map. */
-private fun addRouteShape(style: Style, context: Context) {
-    val geoJson = context.resources
-        .openRawResource(R.raw.shape_504_kabaty_centralny)
-        .bufferedReader()
-        .use { it.readText() }
+/**
+ * Loads the selected brigade's trip: fetch the line, resolve the day's service via
+ * the feed calendar, take the brigade's day-chain, and build the renderable trip.
+ * Returns null (map stays bare) if anything is missing, rather than crashing.
+ */
+private suspend fun loadRoute(context: Context, selection: BrigadeSelection): RouteData? {
+    val data = try {
+        fetchLine(context, selection.line)
+    } catch (e: Exception) {
+        Log.w("JMJ", "couldn't load line ${selection.line}", e)
+        return null
+    }
+    val serviceId = data.resolveServiceId(selection.date) ?: return null
+    val chain = data.services[serviceId]?.get(selection.brigade) ?: return null
+    // TODO: hard-coded to the 2nd trip (first revenue run after the depot pull-out).
+    // TODO: replace with a screen that picks which segment of the day the driver is on.
+    val trip = chain.getOrNull(1) ?: return null
+    val routeGeoJson = data.tripLineGeoJson(trip)
+    val stopsGeoJson = data.tripStopsGeoJson(trip)
+    return RouteData(routeGeoJson, stopsGeoJson, RouteFraming.fromGeoJson(routeGeoJson, stopsGeoJson))
+}
+
+/** Draws the trip's shape as a line on the map. */
+private fun addRouteShape(style: Style, geoJson: String) {
     style.addSource(GeoJsonSource(ROUTE_SOURCE_ID, geoJson))
     style.addLayer(
         LineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID).withProperties(
-            PropertyFactory.lineColor(Color.parseColor("#B60000")), // 504's route colour
+            PropertyFactory.lineColor(Color.parseColor("#B60000")),
             PropertyFactory.lineWidth(6f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -201,12 +230,8 @@ private fun addRouteShape(style: Style, context: Context) {
     )
 }
 
-/** Marks each stop of the hard-coded 504 trip with a circle on top of the route line. */
-private fun addRouteStops(style: Style, context: Context) {
-    val geoJson = context.resources
-        .openRawResource(R.raw.stops_504_kabaty_centralny)
-        .bufferedReader()
-        .use { it.readText() }
+/** Marks each stop of the trip with a circle on top of the route line. */
+private fun addRouteStops(style: Style, geoJson: String) {
     style.addSource(GeoJsonSource(STOPS_SOURCE_ID, geoJson))
     style.addLayer(
         CircleLayer(STOPS_LAYER_ID, STOPS_SOURCE_ID).withProperties(

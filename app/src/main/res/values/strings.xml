@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Jak mam jechać</string>
+    <string name="select_date">Data</string>
     <string name="select_line">Linia</string>
     <string name="select_brigade">Brygada</string>
     <string name="select_day">Dzień</string>

@@ -3,7 +3,6 @@ package pl.waw.oledzki.jmj
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.io.File
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -25,13 +24,9 @@ class RouteFramingTest {
     private val centralny = doubleArrayOf(52.229286, 21.003772) // seq 24
 
     private val framing: RouteFraming = run {
-        fun read(name: String): String {
-            for (candidate in listOf("src/main/res/raw/$name", "app/src/main/res/raw/$name")) {
-                val f = File(candidate)
-                if (f.exists()) return f.readText()
-            }
-            error("can't find $name (cwd=${File("").absolutePath})")
-        }
+        // Fixtures live in src/test/resources (a real 504 half-trip), loaded off the classpath.
+        fun read(name: String): String =
+            javaClass.getResource("/$name")?.readText() ?: error("can't find /$name on the test classpath")
         RouteFraming.fromGeoJson(
             read("shape_504_kabaty_centralny.geojson"),
             read("stops_504_kabaty_centralny.geojson"),
