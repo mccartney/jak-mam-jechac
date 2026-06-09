@@ -20,16 +20,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    // Pick a brigade first; once chosen, show the map. (The map still
-                    // draws the hard-coded 504 until the data layer is wired in.)
+                    // Flow: pick brigade -> pick which leg of its day -> map.
                     var selection by remember { mutableStateOf<BrigadeSelection?>(null) }
-                    val current = selection
-                    if (current == null) {
-                        BrigadeSelectScreen(Modifier.padding(padding)) { selection = it }
-                    } else {
-                        // Back returns to brigade selection instead of leaving the app.
-                        BackHandler { selection = null }
-                        MapScreen(current, Modifier.padding(padding))
+                    var segment by remember { mutableStateOf<Int?>(null) }
+                    val sel = selection
+                    val seg = segment
+                    when {
+                        sel == null ->
+                            BrigadeSelectScreen(Modifier.padding(padding)) { selection = it }
+                        seg == null -> {
+                            // Back returns to brigade selection instead of leaving the app.
+                            BackHandler { selection = null }
+                            SegmentSelectScreen(sel, Modifier.padding(padding)) { segment = it }
+                        }
+                        else -> {
+                            // Back returns to the leg picker.
+                            BackHandler { segment = null }
+                            MapScreen(sel, seg, Modifier.padding(padding))
+                        }
                     }
                 }
             }

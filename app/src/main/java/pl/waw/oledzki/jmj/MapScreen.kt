@@ -64,7 +64,7 @@ private const val STOPS_LAYER_ID = "stops-circles"
 private class RouteData(val routeGeoJson: String, val stopsGeoJson: String, val framing: RouteFraming)
 
 @Composable
-fun MapScreen(selection: BrigadeSelection, modifier: Modifier = Modifier) {
+fun MapScreen(selection: BrigadeSelection, segment: Int, modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
     var locationGranted by remember {
@@ -89,7 +89,7 @@ fun MapScreen(selection: BrigadeSelection, modifier: Modifier = Modifier) {
 
     // Fetch the selected brigade's trip from S3 (cached to disk for dead zones).
     var route by remember { mutableStateOf<RouteData?>(null) }
-    LaunchedEffect(selection) { route = loadRoute(context, selection) }
+    LaunchedEffect(selection, segment) { route = loadRoute(context, selection, segment) }
 
     // Holds the map + loaded style once both are ready, so the location effect
     // below can react to permission being granted at any time.
@@ -200,7 +200,7 @@ private fun frameStops(map: MapLibreMap, sel: RouteFraming.Selection, heightDp: 
  * the feed calendar, take the brigade's day-chain, and build the renderable trip.
  * Returns null (map stays bare) if anything is missing, rather than crashing.
  */
-private suspend fun loadRoute(context: Context, selection: BrigadeSelection): RouteData? {
+private suspend fun loadRoute(context: Context, selection: BrigadeSelection, segment: Int): RouteData? {
     val data = try {
         fetchLine(context, selection.line)
     } catch (e: Exception) {
@@ -209,9 +209,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
     }
     val serviceId = data.resolveServiceId(selection.date) ?: return null
     val chain = data.services[serviceId]?.get(selection.brigade) ?: return null
-    // TODO: hard-coded to the 2nd trip (first revenue run after the depot pull-out).
-    // TODO: replace with a screen that picks which segment of the day the driver is on.
-    val trip = chain.getOrNull(1) ?: return null
+    val trip = chain.getOrNull(segment) ?: return null
     val routeGeoJson = data.tripLineGeoJson(trip)
     val stopsGeoJson = data.tripStopsGeoJson(trip)
     return RouteData(routeGeoJson, stopsGeoJson, RouteFraming.fromGeoJson(routeGeoJson, stopsGeoJson))

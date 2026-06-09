@@ -30,14 +30,22 @@ data class LineData(
 
 data class Stop(val name: String, val lat: Double, val lon: Double)
 
+/** One scheduled stop along a trip. A bus's arrival==departure, so both may be equal. */
+data class StopTime(val stopId: String, val arr: String?, val dep: String?)
+
 /** One trip in a brigade's day. [exc] = 1 marks a non-revenue depot pull-out/in. */
 data class Trip(
     val shape: String?,
     val head: String,
     val varCode: String,
     val exc: Int,
-    val stopIds: List<String>,
-)
+    val stops: List<StopTime>,
+) {
+    val stopIds: List<String> get() = stops.map { it.stopId }
+    /** "HH:MM" leaving the first stop / reaching the last, or null if unscheduled. */
+    val departure: String? get() = stops.firstOrNull()?.let { it.dep ?: it.arr }
+    val arrival: String? get() = stops.lastOrNull()?.let { it.arr ?: it.dep }
+}
 
 /** Fetches and parses a line, caching to disk so a later dead zone still renders. */
 suspend fun fetchLine(context: Context, line: String): LineData = withContext(Dispatchers.IO) {
@@ -111,7 +119,17 @@ private fun parseTrip(t: JSONObject): Trip {
         head = t.optString("head"),
         varCode = t.optString("var"),
         exc = t.optInt("exc"),
-        stopIds = List(s.length()) { s.getJSONObject(it).getString("s") },
+        stops = List(s.length()) { parseStopTime(s.getJSONObject(it)) },
+    )
+}
+
+private fun parseStopTime(s: JSONObject): StopTime {
+    // Compact form: "t" when arrival==departure (buses), else separate "a"/"d".
+    val t = s.optString("t").ifEmpty { null }
+    return StopTime(
+        stopId = s.getString("s"),
+        arr = t ?: s.optString("a").ifEmpty { null },
+        dep = t ?: s.optString("d").ifEmpty { null },
     )
 }
 
