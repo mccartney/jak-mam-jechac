@@ -13,4 +13,9 @@
     <string name="segment_pullout">wyjazd z zajezdni</string>
     <string name="segment_pullin">zjazd do zajezdni</string>
     <string name="segment_nonrevenue">bez pasażerów</string>
+    <string name="tab_sluzba">Służba</string>
+    <string name="tab_kurs">Kurs</string>
+    <string name="tab_mapa">Mapa</string>
+    <string name="hint_pick_sluzba">Najpierw wybierz służbę</string>
+    <string name="hint_pick_kurs">Najpierw wybierz kurs</string>
 </resources>

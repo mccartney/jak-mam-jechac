@@ -30,6 +30,12 @@ data class LineData(
 
 data class Stop(val name: String, val lat: Double, val lon: Double)
 
+/** "HH:MM" → minutes since midnight, tolerant of hours >= 24 (after-midnight trips). */
+fun hhmmToMinutes(hhmm: String): Int {
+    val (h, m) = hhmm.split(":")
+    return h.toInt() * 60 + m.toInt()
+}
+
 /** One scheduled stop along a trip. A bus's arrival==departure, so both may be equal. */
 data class StopTime(val stopId: String, val arr: String?, val dep: String?)
 

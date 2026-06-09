@@ -44,6 +44,8 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import java.time.LocalDate
+import java.time.LocalTime
 
 // OpenFreeMap's "Liberty" vector style — no API key, no usage limits.
 private const val OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
@@ -60,11 +62,32 @@ private const val ROUTE_LAYER_ID = "route-line"
 private const val STOPS_SOURCE_ID = "stops"
 private const val STOPS_LAYER_ID = "stops-circles"
 
-/** The fetched trip ready to render: its GeoJSON for the map layers + framing for the camera. */
-private class RouteData(val routeGeoJson: String, val stopsGeoJson: String, val framing: RouteFraming)
+// Empty geometry for a leg with no drawable shape (e.g. a depot move) — keeps source ids stable.
+private const val EMPTY_LINE = """{"type":"Feature","geometry":{"type":"LineString","coordinates":[]}}"""
+private const val EMPTY_FC = """{"type":"FeatureCollection","features":[]}"""
+
+/**
+ * One leg of the brigade's day, ready to render: GeoJSON for the layers, framing for the
+ * camera (null if the leg has no drawable shape), and its scheduled departure in minutes
+ * (feeds the auto-advance schedule guard).
+ */
+private class Leg(
+    val routeGeoJson: String?,
+    val stopsGeoJson: String?,
+    val framing: RouteFraming?,
+    val departureMin: Int?,
+)
+
+/** The whole day-chain plus whether it's being driven today (gates the schedule guard). */
+private class RoutePlan(val legs: List<Leg>, val isToday: Boolean)
 
 @Composable
-fun MapScreen(selection: BrigadeSelection, segment: Int, modifier: Modifier = Modifier) {
+fun MapScreen(
+    selection: BrigadeSelection,
+    activeLeg: Int,
+    onLegChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
 
     var locationGranted by remember {
@@ -87,9 +110,12 @@ fun MapScreen(selection: BrigadeSelection, segment: Int, modifier: Modifier = Mo
 
     val mapView = rememberMapViewWithLifecycle()
 
-    // Fetch the selected brigade's trip from S3 (cached to disk for dead zones).
-    var route by remember { mutableStateOf<RouteData?>(null) }
-    LaunchedEffect(selection, segment) { route = loadRoute(context, selection, segment) }
+    // Fetch the whole brigade-day chain from S3 (cached to disk for dead zones).
+    var plan by remember { mutableStateOf<RoutePlan?>(null) }
+    LaunchedEffect(selection) { plan = loadRoute(context, selection) }
+    // The active leg is controlled by the parent (the Kurs tab shows it); auto-advance
+    // at a terminus reports the new index up via onLegChange.
+    val leg = plan?.legs?.getOrNull(activeLeg)
 
     // Holds the map + loaded style once both are ready, so the location effect
     // below can react to permission being granted at any time.
@@ -105,21 +131,27 @@ fun MapScreen(selection: BrigadeSelection, segment: Int, modifier: Modifier = Mo
         }
     })
 
-    // Draw the route once both the style and the fetched data are available.
-    LaunchedEffect(ready, route) {
+    // (Re)draw whenever the style is ready or the active leg changes.
+    LaunchedEffect(ready, leg) {
         val (_, style) = ready ?: return@LaunchedEffect
-        val r = route ?: return@LaunchedEffect
-        addRouteShape(style, r.routeGeoJson)
-        addRouteStops(style, r.stopsGeoJson)
+        setRoute(style, leg ?: return@LaunchedEffect)
     }
 
-    // Once the map is ready and permission is granted, start our own location
-    // updates: move the puck and re-frame the camera each fix.
-    DisposableEffect(ready, route, locationGranted) {
-        val (map, _) = ready ?: return@DisposableEffect onDispose {}
-        val framing = route?.framing ?: return@DisposableEffect onDispose {}
+    // Once the map is ready and permission is granted, start our own location updates:
+    // move the puck, re-frame the camera, and auto-advance to the next leg at the terminus.
+    // Re-keyed on activeLeg so each leg gets a fresh framing + advancer.
+    DisposableEffect(ready, plan, activeLeg, locationGranted) {
+        val (map, style) = ready ?: return@DisposableEffect onDispose {}
+        val p = plan ?: return@DisposableEffect onDispose {}
         if (!locationGranted) return@DisposableEffect onDispose {}
-        val component = enableLocation(map, ready!!.second, context)
+        val current = p.legs.getOrNull(activeLeg) ?: return@DisposableEffect onDispose {}
+        val next = p.legs.getOrNull(activeLeg + 1)
+        // Auto-advance needs both legs drawable; the schedule guard only applies when driving today.
+        val advancer = if (current.framing != null && next?.framing != null)
+            LegAdvancer(current.framing, next.framing, if (p.isToday) next.departureMin else null)
+        else null
+
+        val component = enableLocation(map, style, context)
         val engine = LocationEngineDefault.getDefaultLocationEngine(context)
         // MapLibre's projection works in logical (dp) pixels; View height is physical.
         val density = context.resources.displayMetrics.density
@@ -130,7 +162,14 @@ fun MapScreen(selection: BrigadeSelection, segment: Int, modifier: Modifier = Mo
             override fun onSuccess(result: LocationEngineResult) {
                 val location = result.lastLocation ?: return
                 component.forceLocationUpdate(location)
-                val sel = framing.select(location) ?: return
+                if (advancer != null) {
+                    val nowMin = LocalTime.now().run { hour * 60 + minute }
+                    if (advancer.onFix(location.latitude, location.longitude, nowMin, location.time)) {
+                        onLegChange(activeLeg + 1)   // parent re-passes; the next leg takes over
+                        return
+                    }
+                }
+                val sel = current.framing?.select(location) ?: return
                 if (sel.key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
                 if (height == 0 || sel.spanMeters <= 0.0) return
@@ -196,11 +235,11 @@ private fun frameStops(map: MapLibreMap, sel: RouteFraming.Selection, heightDp: 
 }
 
 /**
- * Loads the selected brigade's trip: fetch the line, resolve the day's service via
- * the feed calendar, take the brigade's day-chain, and build the renderable trip.
+ * Loads the selected brigade's whole day: fetch the line, resolve the day's service via
+ * the feed calendar, take the brigade's chain, and build a renderable leg for each trip.
  * Returns null (map stays bare) if anything is missing, rather than crashing.
  */
-private suspend fun loadRoute(context: Context, selection: BrigadeSelection, segment: Int): RouteData? {
+private suspend fun loadRoute(context: Context, selection: BrigadeSelection): RoutePlan? {
     val data = try {
         fetchLine(context, selection.line)
     } catch (e: Exception) {
@@ -209,10 +248,33 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection, seg
     }
     val serviceId = data.resolveServiceId(selection.date) ?: return null
     val chain = data.services[serviceId]?.get(selection.brigade) ?: return null
-    val trip = chain.getOrNull(segment) ?: return null
-    val routeGeoJson = data.tripLineGeoJson(trip)
-    val stopsGeoJson = data.tripStopsGeoJson(trip)
-    return RouteData(routeGeoJson, stopsGeoJson, RouteFraming.fromGeoJson(routeGeoJson, stopsGeoJson))
+    val legs = chain.map { trip ->
+        val route = data.tripLineGeoJson(trip)
+        val stops = data.tripStopsGeoJson(trip)
+        // A depot move may carry no shape; fromGeoJson throws on an empty path, so leave it undrawable.
+        val framing = runCatching { RouteFraming.fromGeoJson(route, stops) }.getOrNull()
+        Leg(
+            routeGeoJson = if (framing != null) route else null,
+            stopsGeoJson = if (framing != null) stops else null,
+            framing = framing,
+            departureMin = trip.departure?.let { hhmmToMinutes(it) },
+        )
+    }
+    return RoutePlan(legs, isToday = selection.date == LocalDate.now())
+}
+
+/** Adds the route + stop layers the first time, then just swaps their data on later legs. */
+private fun setRoute(style: Style, leg: Leg) {
+    val route = leg.routeGeoJson ?: EMPTY_LINE
+    val stops = leg.stopsGeoJson ?: EMPTY_FC
+    val existing = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
+    if (existing == null) {
+        addRouteShape(style, route)
+        addRouteStops(style, stops)
+    } else {
+        existing.setGeoJson(route)
+        style.getSourceAs<GeoJsonSource>(STOPS_SOURCE_ID)?.setGeoJson(stops)
+    }
 }
 
 /** Draws the trip's shape as a line on the map. */

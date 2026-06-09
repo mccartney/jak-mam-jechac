@@ -39,7 +39,7 @@ import java.time.LocalTime
 fun SegmentSelectScreen(
     selection: BrigadeSelection,
     modifier: Modifier = Modifier,
-    onConfirm: (Int) -> Unit,
+    onConfirm: (index: Int, count: Int) -> Unit,
 ) {
     val context = LocalContext.current
     var data by remember { mutableStateOf<LineData?>(null) }
@@ -65,7 +65,7 @@ fun SegmentSelectScreen(
         loading -> Centered(modifier) { CircularProgressIndicator() }
         failed -> Centered(modifier) { Text(stringResource(R.string.segment_error)) }
         d == null || trips.isNullOrEmpty() -> Centered(modifier) { Text(stringResource(R.string.segment_empty)) }
-        else -> SegmentList(selection, d, trips, modifier, onConfirm)
+        else -> SegmentList(selection, d, trips, modifier) { onConfirm(it, trips.size) }
     }
 }
 
@@ -164,12 +164,6 @@ private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
 private fun suggestedIndex(trips: List<Trip>, date: LocalDate): Int {
     if (date != LocalDate.now()) return trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
     val now = LocalTime.now().run { hour * 60 + minute }
-    val i = trips.indexOfFirst { (it.arrival?.let(::minutesOfDay) ?: Int.MAX_VALUE) >= now }
+    val i = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= now }
     return if (i >= 0) i else trips.lastIndex
-}
-
-/** "HH:MM" → minutes since midnight, tolerant of hours >= 24 (after-midnight legs). */
-private fun minutesOfDay(hhmm: String): Int {
-    val (h, m) = hhmm.split(":")
-    return h.toInt() * 60 + m.toInt()
 }

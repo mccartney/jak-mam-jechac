@@ -32,11 +32,29 @@ class RouteFraming private constructor(
         val key: Int,           // index of the next stop; identifies the current segment
     )
 
+    /** Where a position sits relative to this leg, used to detect arrival/handoff. */
+    data class Fix(
+        val distToPath: Double, // metres off the nearest point of the path
+        val arc: Double,        // metres travelled along the path to that point
+        val distToEnd: Double,  // straight-line metres to the final stop ("arrived" when small)
+    )
+
+    fun locate(location: Location): Fix = locate(location.latitude, location.longitude)
+
+    fun locate(lat: Double, lon: Double): Fix {
+        val (arc, dist) = projectArc(path, cum, ref, lat, lon)
+        val end = stops.lastOrNull()?.let {
+            val p = xy(lat, lon, ref); val q = xy(it.latitude, it.longitude, ref)
+            hypot(p[0] - q[0], p[1] - q[1])
+        } ?: 0.0
+        return Fix(dist, arc, end)
+    }
+
     fun select(location: Location): Selection? = select(location.latitude, location.longitude)
 
     fun select(lat: Double, lon: Double): Selection? {
         if (stops.size < 2) return null
-        val s = arcLengthOf(path, cum, ref, lat, lon)
+        val s = projectArc(path, cum, ref, lat, lon).first
         var k = stopArc.indexOfFirst { it > s }
         if (k < 0) k = stops.lastIndex     // past the last stop
         if (k == 0) k = 1                  // before the first stop
@@ -81,7 +99,7 @@ class RouteFraming private constructor(
                     hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1])
             }
             val stopArc = DoubleArray(stops.size) {
-                arcLengthOf(path, cum, ref, stops[it].latitude, stops[it].longitude)
+                projectArc(path, cum, ref, stops[it].latitude, stops[it].longitude).first
             }
             return RouteFraming(path, cum, stops, stopArc, ref)
         }
@@ -91,10 +109,13 @@ class RouteFraming private constructor(
             (lat - ref.latitude) * M_PER_DEG_LAT,
         )
 
-        /** Distance (metres) from the path start to the point on the path closest to (lat,lon). */
-        private fun arcLengthOf(
+        /**
+         * Projects (lat,lon) onto the path: returns (arc, dist) where arc is the metres
+         * from the path start to the closest point, and dist is how far off it lies.
+         */
+        private fun projectArc(
             path: List<DoubleArray>, cum: DoubleArray, ref: LatLng, lat: Double, lon: Double,
-        ): Double {
+        ): Pair<Double, Double> {
             val p = xy(lat, lon, ref)
             var best = Double.MAX_VALUE
             var bestArc = 0.0
@@ -111,7 +132,7 @@ class RouteFraming private constructor(
                     bestArc = cum[i] + t * hypot(abx, aby)
                 }
             }
-            return bestArc
+            return bestArc to best
         }
 
         private fun readLineString(geoJson: String): List<LatLng> {
