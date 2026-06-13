@@ -44,8 +44,6 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
-import java.time.LocalDate
-import java.time.LocalTime
 
 // OpenFreeMap's "Liberty" vector style — no API key, no usage limits.
 private const val OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
@@ -67,19 +65,17 @@ private const val EMPTY_LINE = """{"type":"Feature","geometry":{"type":"LineStri
 private const val EMPTY_FC = """{"type":"FeatureCollection","features":[]}"""
 
 /**
- * One leg of the brigade's day, ready to render: GeoJSON for the layers, framing for the
- * camera (null if the leg has no drawable shape), and its scheduled departure in minutes
- * (feeds the auto-advance schedule guard).
+ * One leg of the brigade's day, ready to render: GeoJSON for the layers and framing for the
+ * camera (null if the leg has no drawable shape).
  */
 private class Leg(
     val routeGeoJson: String?,
     val stopsGeoJson: String?,
     val framing: RouteFraming?,
-    val departureMin: Int?,
 )
 
-/** The whole day-chain plus whether it's being driven today (gates the schedule guard). */
-private class RoutePlan(val legs: List<Leg>, val isToday: Boolean)
+/** The whole day-chain. */
+private class RoutePlan(val legs: List<Leg>)
 
 @Composable
 fun MapScreen(
@@ -146,9 +142,9 @@ fun MapScreen(
         if (!locationGranted) return@DisposableEffect onDispose {}
         val current = p.legs.getOrNull(activeLeg) ?: return@DisposableEffect onDispose {}
         val next = p.legs.getOrNull(activeLeg + 1)
-        // Auto-advance needs both legs drawable; the schedule guard only applies when driving today.
+        // Auto-advance needs both legs drawable.
         val advancer = if (current.framing != null && next?.framing != null)
-            LegAdvancer(current.framing, next.framing, if (p.isToday) next.departureMin else null)
+            LegAdvancer(current.framing, next.framing)
         else null
 
         val component = enableLocation(map, style, context)
@@ -162,12 +158,11 @@ fun MapScreen(
             override fun onSuccess(result: LocationEngineResult) {
                 val location = result.lastLocation ?: return
                 component.forceLocationUpdate(location)
-                if (advancer != null) {
-                    val nowMin = LocalTime.now().run { hour * 60 + minute }
-                    if (advancer.onFix(location.latitude, location.longitude, nowMin, location.time)) {
-                        onLegChange(activeLeg + 1)   // parent re-passes; the next leg takes over
-                        return
-                    }
+                if (advancer != null &&
+                    advancer.onFix(location.latitude, location.longitude, location.time)
+                ) {
+                    onLegChange(activeLeg + 1)   // parent re-passes; the next leg takes over
+                    return
                 }
                 val sel = current.framing?.select(location) ?: return
                 if (sel.key == lastSegment) return        // same segment → leave camera put
@@ -266,10 +261,9 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
             routeGeoJson = if (framing != null) route else null,
             stopsGeoJson = if (framing != null) stops else null,
             framing = framing,
-            departureMin = trip.departure?.let { hhmmToMinutes(it) },
         )
     }
-    return RoutePlan(legs, isToday = selection.date == LocalDate.now())
+    return RoutePlan(legs)
 }
 
 /** Adds the route + stop layers the first time, then just swaps their data on later legs. */
