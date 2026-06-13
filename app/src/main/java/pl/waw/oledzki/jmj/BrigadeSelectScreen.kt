@@ -4,9 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -100,11 +100,12 @@ fun BrigadeSelectScreen(
             }
         }
 
-        Spacer(Modifier.weight(1f))
         Button(
             onClick = { onConfirm(BrigadeSelection(line, brigade, date)) },
             enabled = line.isNotBlank() && brigade.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp),
         ) { Text(stringResource(R.string.select_confirm)) }
     }
 
