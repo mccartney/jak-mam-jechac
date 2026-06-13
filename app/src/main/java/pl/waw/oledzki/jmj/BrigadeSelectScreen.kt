@@ -46,9 +46,8 @@ fun BrigadeSelectScreen(
     onConfirm: (BrigadeSelection) -> Unit,
 ) {
     var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    // Prefilled with the trip we know exists, so the screen is usable out of the box.
-    var line by rememberSaveable { mutableStateOf("504") }
-    var brigade by rememberSaveable { mutableStateOf("1") }
+    var line by rememberSaveable { mutableStateOf("") }
+    var brigade by rememberSaveable { mutableStateOf("") }
     var showPicker by remember { mutableStateOf(false) }
     val day = ServiceDay.of(date)
 
@@ -75,7 +74,7 @@ fun BrigadeSelectScreen(
             value = line,
             onValueChange = { line = it.trim() },
             label = { Text(stringResource(R.string.select_line)) },
-            placeholder = { Text("504") },
+            placeholder = { Text("linia") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -85,7 +84,7 @@ fun BrigadeSelectScreen(
             // alphanumerics only and upper-case them.
             onValueChange = { brigade = it.filter(Char::isLetterOrDigit).uppercase() },
             label = { Text(stringResource(R.string.select_brigade)) },
-            placeholder = { Text("01") },
+            placeholder = { Text("brygada") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
             modifier = Modifier.fillMaxWidth(),

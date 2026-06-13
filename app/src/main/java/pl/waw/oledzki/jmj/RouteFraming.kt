@@ -12,8 +12,8 @@ import kotlin.math.sin
 private const val M_PER_DEG_LAT = 111_320.0
 
 /**
- * The hard-coded 504 path and its stops. Given a position, finds the stop just
- * behind and just ahead along the path and describes how to frame them.
+ * A trip's path and its stops. Given a position, finds the stop just behind and
+ * just ahead along the path and describes how to frame them.
  *
  * Geometry uses a local equirectangular projection (metres) anchored at the
  * path's first point — accurate enough across a single bus line's extent.
