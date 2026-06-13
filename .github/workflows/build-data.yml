@@ -40,7 +40,7 @@ jobs:
       # Accept-Encoding and S3 returns them with Content-Encoding: gzip.
       - name: Gzip in place
         run: |
-          for f in out/manifest.json out/lines/*.json; do
+          for f in out/manifest.json out/brigades.json out/lines/*.json; do
             gzip -c "$f" > "$f.gz" && mv "$f.gz" "$f"
           done
 

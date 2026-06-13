@@ -30,6 +30,21 @@ data class LineData(
 
 data class Stop(val name: String, val lat: Double, val lon: Double)
 
+/**
+ * One line as shown in the picker: its number, display name, vehicle type, and the
+ * brigades running on each day-type. Comes from the small brigades.json index, so the
+ * picker never has to download a full (multi-MB) line file just to list brigades.
+ */
+data class LineInfo(
+    val line: String,
+    val name: String,
+    val type: Int,                                  // GTFS route_type: 0 = tram, 3 = bus
+    val brigadesByDay: Map<String, List<String>>,   // ServiceDay.code -> brigades
+) {
+    val isTram: Boolean get() = type == 0
+    fun brigades(day: ServiceDay): List<String> = brigadesByDay[day.code].orEmpty()
+}
+
 /** "HH:MM" → minutes since midnight, tolerant of hours >= 24 (after-midnight trips). */
 fun hhmmToMinutes(hhmm: String): Int {
     val (h, m) = hhmm.split(":")
@@ -62,6 +77,40 @@ suspend fun fetchLine(context: Context, line: String): LineData = withContext(Di
         if (cache.exists()) cache.readBytes() else throw e
     }
     parseLine(bytes.decodeToString())
+}
+
+// The brigade index rarely changes (schedules turn over ~every 10 days), so reuse the
+// cached copy for a day rather than re-downloading it on every visit to the picker.
+private const val BRIGADES_TTL_MS = 24L * 60 * 60 * 1000
+
+/** Fetches the line/brigade picker index, served from the on-disk cache while it's fresh. */
+suspend fun fetchBrigades(context: Context): List<LineInfo> = withContext(Dispatchers.IO) {
+    val cache = context.cacheDir.resolve("brigades.json")
+    val fresh = cache.exists() && System.currentTimeMillis() - cache.lastModified() < BRIGADES_TTL_MS
+    val bytes = if (fresh) {
+        cache.readBytes()
+    } else try {
+        download("$DATA_BASE_URL/brigades.json").also { cache.writeBytes(it) }
+    } catch (e: Exception) {
+        if (cache.exists()) cache.readBytes() else throw e
+    }
+    parseBrigades(bytes.decodeToString())
+}
+
+private fun parseBrigades(json: String): List<LineInfo> {
+    val lines = JSONObject(json).getJSONObject("lines")
+    return lines.keys().asSequence().map { line ->
+        val o = lines.getJSONObject(line)
+        val byDay = o.getJSONObject("brigades")
+        LineInfo(
+            line = line,
+            name = o.optString("name"),
+            type = o.optInt("type"),
+            brigadesByDay = byDay.keys().asSequence().associateWith { code ->
+                byDay.getJSONArray(code).let { a -> List(a.length()) { a.getString(it) } }
+            },
+        )
+    }.toList()
 }
 
 private fun download(url: String): ByteArray {

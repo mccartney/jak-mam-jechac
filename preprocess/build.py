@@ -69,6 +69,11 @@ def stop_entry(stop_id, arr, dep):
     return {"s": stop_id, "a": hhmm(arr), "d": hhmm(dep)}
 
 
+def daytype(service_id):
+    """ZTM service_ids look like '2026-06-13:SbS'; the suffix is the day-type code."""
+    return service_id.rsplit(":", 1)[-1]
+
+
 def build(feed, wanted_lines):
     """Returns {line: line_dict}. wanted_lines is a set of route_short_names, or None for all."""
     # routes: keep only the lines we want, indexed by route_id (== short_name in this feed,
@@ -246,6 +251,10 @@ def main():
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     manifest = {"feedVersion": feed_version, "generated": generated, "lines": {}}
+    # Small selection index for the app's picker: every line with its display name/type
+    # and the brigades running on each day-type. One cached file spares the picker from
+    # pulling a multi-MB line file just to list its brigades.
+    select = {"feedVersion": feed_version, "generated": generated, "lines": {}}
     for line, data in sorted(lines.items()):
         data["feedVersion"] = feed_version
         payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -256,14 +265,25 @@ def main():
             with gzip.open(path + ".gz", "wb") as fh:
                 fh.write(payload)
         manifest["lines"][line] = {"name": data["name"], "type": data["type"], "bytes": len(payload)}
+
+        by_day = {}  # day-type code -> set of brigades running that day
+        for service_id, brigades in data["services"].items():
+            by_day.setdefault(daytype(service_id), set()).update(brigades.keys())
+        select["lines"][line] = {
+            "name": data["name"],
+            "type": data["type"],
+            "brigades": {code: sorted(by_day[code]) for code in sorted(by_day)},
+        }
         print(f"  {line:>5}  {len(payload):>8} B  "
               f"{len(data['services'])} services  {len(data['shapes'])} shapes  "
               f"{len(data['stops'])} stops", file=sys.stderr)
 
     with open(os.path.join(args.out, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, ensure_ascii=False, separators=(",", ":"))
+    with open(os.path.join(args.out, "brigades.json"), "w", encoding="utf-8") as fh:
+        json.dump(select, fh, ensure_ascii=False, separators=(",", ":"))
 
-    print(f"wrote {len(lines)} line file(s) + manifest.json to {args.out}/", file=sys.stderr)
+    print(f"wrote {len(lines)} line file(s) + manifest.json + brigades.json to {args.out}/", file=sys.stderr)
 
 
 if __name__ == "__main__":
