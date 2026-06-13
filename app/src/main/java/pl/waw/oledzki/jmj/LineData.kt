@@ -82,10 +82,13 @@ suspend fun fetchLine(context: Context, line: String): LineData = withContext(Di
 // cached copy for a day rather than re-downloading it on every visit to the picker.
 private const val BRIGADES_TTL_MS = 24L * 60 * 60 * 1000
 
-/** Fetches the line/brigade picker index, served from the on-disk cache while it's fresh. */
-suspend fun fetchBrigades(context: Context): List<LineInfo> = withContext(Dispatchers.IO) {
+/**
+ * Fetches the line/brigade picker index, served from the on-disk cache while it's fresh.
+ * [force] skips the freshness check to re-download now (the pull-to-refresh gesture).
+ */
+suspend fun fetchBrigades(context: Context, force: Boolean = false): List<LineInfo> = withContext(Dispatchers.IO) {
     val cache = context.cacheDir.resolve("brigades.json")
-    val fresh = cache.exists() && System.currentTimeMillis() - cache.lastModified() < BRIGADES_TTL_MS
+    val fresh = !force && cache.exists() && System.currentTimeMillis() - cache.lastModified() < BRIGADES_TTL_MS
     val bytes = if (fresh) {
         cache.readBytes()
     } else try {

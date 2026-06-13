@@ -4,16 +4,16 @@ import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -29,12 +29,14 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -80,27 +83,72 @@ fun BrigadeSelectScreen(
         }
     }
 
+    // Pull down past the top of the line list to re-download the index and wipe the form.
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+    fun refresh() = scope.launch {
+        refreshing = true
+        date = LocalDate.now(); line = ""; brigade = ""; query = ""
+        failed = false
+        try {
+            index = fetchBrigades(context, force = true)
+        } catch (e: Exception) {
+            failed = true
+        }
+        refreshing = false
+    }
+
     val day = ServiceDay.of(date)
     val loaded = index
     val selected = loaded?.firstOrNull { it.line == line }
+    val filtered = remember(loaded, query) {
+        val all = loaded ?: return@remember emptyList<LineInfo>()
+        val q = query.trim()
+        (if (q.isEmpty()) all
+        else all.filter { it.line.startsWith(q, true) || it.name.contains(q, true) })
+            .sortedWith(lineOrder)
+    }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    // The whole screen is one scrollable list inside the pull-to-refresh box, so pulling
+    // down from the very top (over the date field) re-downloads the index and clears the form.
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = { refresh() },
+        modifier = modifier.fillMaxSize(),
     ) {
-        DateField(date) { showPicker = true }
-        ServiceDayRow(day)
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item("date") { DateField(date) { showPicker = true } }
+            item("day") { ServiceDayRow(day) }
 
-        Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                loaded == null && !failed -> Centered { CircularProgressIndicator() }
-                loaded == null -> Centered { Text(stringResource(R.string.lines_error)) }
-                selected == null -> LinePicker(loaded, query, onQuery = { query = it }) { picked ->
-                    line = picked.line; brigade = ""
+                loaded == null && !failed -> item("loading") {
+                    Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
-                else -> BrigadePicker(
+                loaded == null -> item("error") {
+                    Text(stringResource(R.string.lines_error))
+                }
+                selected == null -> {
+                    item("search") {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            label = { Text(stringResource(R.string.select_line)) },
+                            placeholder = { Text("linia") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    items(filtered, key = { it.line }) { info ->
+                        LineRow(info) { line = info.line; brigade = "" }
+                    }
+                }
+                else -> brigadeItems(
                     info = selected,
                     day = day,
                     brigade = brigade,
@@ -170,38 +218,6 @@ private fun ServiceDayRow(day: ServiceDay) {
     }
 }
 
-/** Search box + scrollable list of lines (number, name, tram/bus badge). */
-@Composable
-private fun LinePicker(
-    lines: List<LineInfo>,
-    query: String,
-    onQuery: (String) -> Unit,
-    onPick: (LineInfo) -> Unit,
-) {
-    val filtered = remember(lines, query) {
-        val q = query.trim()
-        (if (q.isEmpty()) lines
-        else lines.filter { it.line.startsWith(q, true) || it.name.contains(q, true) })
-            .sortedWith(lineOrder)
-    }
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQuery,
-            label = { Text(stringResource(R.string.select_line)) },
-            placeholder = { Text("linia") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        LazyColumn(
-            Modifier.fillMaxWidth().weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(filtered, key = { it.line }) { info -> LineRow(info) { onPick(info) } }
-        }
-    }
-}
-
 @Composable
 private fun LineRow(info: LineInfo, onClick: () -> Unit) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -216,10 +232,9 @@ private fun LineRow(info: LineInfo, onClick: () -> Unit) {
     }
 }
 
-/** Chosen line (tap to change) + the day's brigades as chips, then the confirm button. */
+/** Chosen line (tap to change), the day's brigades as chips, then the confirm button. */
 @OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun BrigadePicker(
+private fun LazyListScope.brigadeItems(
     info: LineInfo,
     day: ServiceDay,
     brigade: String,
@@ -227,8 +242,8 @@ private fun BrigadePicker(
     onChangeLine: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val brigades = remember(info, day) { info.brigades(day).sortedWith(brigadeOrder) }
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val brigades = info.brigades(day).sortedWith(brigadeOrder)
+    item("chosen") {
         Card(Modifier.fillMaxWidth().clickable(onClick = onChangeLine)) {
             Row(
                 Modifier.fillMaxWidth().padding(16.dp),
@@ -244,7 +259,11 @@ private fun BrigadePicker(
                 )
             }
         }
+    }
+    item("brigades-label") {
         Text(stringResource(R.string.select_brigade), style = MaterialTheme.typography.titleMedium)
+    }
+    item("brigades") {
         if (brigades.isEmpty()) {
             Text(stringResource(R.string.no_brigades), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -258,18 +277,14 @@ private fun BrigadePicker(
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
+    }
+    item("confirm") {
         Button(
             onClick = onConfirm,
             enabled = brigade in brigades,
             modifier = Modifier.fillMaxWidth().height(80.dp),
         ) { Text(stringResource(R.string.select_confirm)) }
     }
-}
-
-@Composable
-private fun Centered(content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }
 
 // Lines and brigades: real numbers first in numeric order (1, 2, … 10, …), then any
