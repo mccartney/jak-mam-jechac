@@ -74,14 +74,10 @@ def daytype(service_id):
     return service_id.rsplit(":", 1)[-1]
 
 
-def is_bus_line(line):
-    """The picker is for bus drivers: drop trams (digit-only < 100), metro (M1, M2…)
-    and trains (S1, S2…)."""
-    if line.isdigit() and int(line) < 100:
-        return False
-    if line[:1] in ("M", "S") and line[1:].isdigit():
-        return False
-    return True
+# The picker is for bus drivers, so it lists buses only. GTFS route_type cleanly
+# separates the modes (0 tram, 1 metro, 2 rail, 3 bus) — filtering on it drops trams
+# (incl. the oddly-named "S" Zoo tram), metro (M1/M2) and trains (S1–S40) in one go.
+BUS_ROUTE_TYPE = 3
 
 
 def build(feed, wanted_lines):
@@ -276,7 +272,7 @@ def main():
                 fh.write(payload)
         manifest["lines"][line] = {"name": data["name"], "type": data["type"], "bytes": len(payload)}
 
-        if is_bus_line(line):
+        if data["type"] == BUS_ROUTE_TYPE:
             by_day = {}  # day-type code -> set of brigades running that day
             for service_id, brigades in data["services"].items():
                 by_day.setdefault(daytype(service_id), set()).update(brigades.keys())

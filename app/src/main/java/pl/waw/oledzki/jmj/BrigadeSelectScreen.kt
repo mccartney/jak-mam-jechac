@@ -212,11 +212,6 @@ private fun LineRow(info: LineInfo, onClick: () -> Unit) {
         ) {
             Text(info.line, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(info.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(
-                stringResource(if (info.isTram) R.string.vehicle_tram else R.string.vehicle_bus),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

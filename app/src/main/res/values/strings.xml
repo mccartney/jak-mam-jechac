@@ -9,8 +9,6 @@
     <string name="lines_error">Nie udało się wczytać linii</string>
     <string name="no_brigades">Brak brygad tego dnia</string>
     <string name="change_line">zmień</string>
-    <string name="vehicle_tram">tram</string>
-    <string name="vehicle_bus">bus</string>
     <string name="select_segment">Który kurs?</string>
     <string name="segment_now">teraz</string>
     <string name="segment_error">Nie udało się wczytać rozkładu</string>

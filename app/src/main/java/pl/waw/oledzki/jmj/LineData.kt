@@ -38,10 +38,9 @@ data class Stop(val name: String, val lat: Double, val lon: Double)
 data class LineInfo(
     val line: String,
     val name: String,
-    val type: Int,                                  // GTFS route_type: 0 = tram, 3 = bus
+    val type: Int,                                  // GTFS route_type (always 3/bus here)
     val brigadesByDay: Map<String, List<String>>,   // ServiceDay.code -> brigades
 ) {
-    val isTram: Boolean get() = type == 0
     fun brigades(day: ServiceDay): List<String> = brigadesByDay[day.code].orEmpty()
 }
 
