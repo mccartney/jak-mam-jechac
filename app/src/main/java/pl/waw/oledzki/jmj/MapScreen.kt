@@ -172,10 +172,13 @@ fun MapScreen(
                 val sel = current.framing?.select(location) ?: return
                 if (sel.key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
-                if (height == 0 || sel.spanMeters <= 0.0) return
+                val width = mapView.width
+                if (height == 0 || width == 0 || sel.spanMeters <= 0.0) return
                 lastSegment = sel.key
                 map.animateCamera(
-                    CameraUpdateFactory.newCameraPosition(frameStops(map, sel, height / density)),
+                    CameraUpdateFactory.newCameraPosition(
+                        frameStops(map, sel, height / density, width / density),
+                    ),
                     CAMERA_ANIM_MS,
                 )
             }
@@ -217,14 +220,20 @@ private fun enableLocation(map: MapLibreMap, style: Style, context: Context): Lo
 }
 
 /**
- * Camera that places the previous stop low on screen and the next stop high, with
- * travel pointing up. Zoom is derived from MapLibre's own metres-per-pixel so the
- * prev→next span fills [FRAME_FRACTION] of the screen height.
+ * Camera centred on the road between the previous and next stop, with travel pointing
+ * up. Zoom is derived from MapLibre's own metres-per-pixel so the road fills
+ * [FRAME_FRACTION] of the screen; we fit both its along-travel extent (height) and its
+ * cross-travel extent (width) and take the looser (more zoomed-out) of the two, so a
+ * hairpin that bulges sideways stays fully on screen.
  */
-private fun frameStops(map: MapLibreMap, sel: RouteFraming.Selection, heightDp: Float): CameraPosition {
+private fun frameStops(
+    map: MapLibreMap, sel: RouteFraming.Selection, heightDp: Float, widthDp: Float,
+): CameraPosition {
     val mppNow = map.projection.getMetersPerPixelAtLatitude(sel.target.latitude)
-    val zoom = RouteFraming.zoomForSpan(
-        map.cameraPosition.zoom, mppNow, sel.spanMeters, heightDp.toDouble(), FRAME_FRACTION,
+    val z = map.cameraPosition.zoom
+    val zoom = minOf(
+        RouteFraming.zoomForSpan(z, mppNow, sel.spanMeters, heightDp.toDouble(), FRAME_FRACTION),
+        RouteFraming.zoomForSpan(z, mppNow, sel.crossMeters, widthDp.toDouble(), FRAME_FRACTION),
     )
     return CameraPosition.Builder()
         .target(sel.target)

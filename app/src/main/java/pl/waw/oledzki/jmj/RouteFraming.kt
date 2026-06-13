@@ -7,6 +7,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.ln
+import kotlin.math.sin
 
 private const val M_PER_DEG_LAT = 111_320.0
 
@@ -26,10 +27,11 @@ class RouteFraming private constructor(
 ) {
     /** How to frame the trip between the previous and next stop. */
     data class Selection(
-        val target: LatLng,     // midpoint of prev/next — goes to screen centre
-        val bearing: Double,    // compass bearing prev→next, so travel points up
-        val spanMeters: Double, // distance prev↔next
-        val key: Int,           // index of the next stop; identifies the current segment
+        val target: LatLng,      // centre of the road between prev/next — goes to screen centre
+        val bearing: Double,     // compass bearing prev→next, so travel points up
+        val spanMeters: Double,  // extent of the road along travel (vertical fit)
+        val crossMeters: Double, // extent of the road across travel (horizontal fit)
+        val key: Int,            // index of the next stop; identifies the current segment
     )
 
     /** Where a position sits relative to this leg, used to detect arrival/handoff. */
@@ -64,8 +66,38 @@ class RouteFraming private constructor(
         val dy = (next.latitude - prev.latitude) * M_PER_DEG_LAT
         var bearing = Math.toDegrees(atan2(dx, dy))
         if (bearing < 0) bearing += 360.0
-        val target = LatLng((prev.latitude + next.latitude) / 2, (prev.longitude + next.longitude) / 2)
-        return Selection(target, bearing, hypot(dx, dy), k)
+
+        // Frame the *actual road* between the two stops, not just the straight chord: a
+        // hairpin or loop between close stops bulges far past the chord, and the bus (so
+        // the puck) rides that bulge — chord-only framing pushes it off-screen. Box the
+        // path between the stops in a travel-up frame (along = up, cross = sideways).
+        val theta = Math.toRadians(bearing)
+        val sinT = sin(theta); val cosT = cos(theta)
+        val lo = minOf(stopArc[k - 1], stopArc[k])
+        val hi = maxOf(stopArc[k - 1], stopArc[k])
+        var alongMin = Double.MAX_VALUE; var alongMax = -Double.MAX_VALUE
+        var crossMin = Double.MAX_VALUE; var crossMax = -Double.MAX_VALUE
+        fun include(p: DoubleArray) {
+            val along = p[0] * sinT + p[1] * cosT
+            val cross = p[0] * cosT - p[1] * sinT
+            alongMin = minOf(alongMin, along); alongMax = maxOf(alongMax, along)
+            crossMin = minOf(crossMin, cross); crossMax = maxOf(crossMax, cross)
+        }
+        include(xy(prev.latitude, prev.longitude, ref))
+        include(xy(next.latitude, next.longitude, ref))
+        for (i in path.indices) if (cum[i] in lo..hi) include(path[i])
+
+        val alongC = (alongMin + alongMax) / 2
+        val crossC = (crossMin + crossMax) / 2
+        // Rotate the box centre back to east/north (this rotation is its own inverse)…
+        val east = alongC * sinT + crossC * cosT
+        val north = alongC * cosT - crossC * sinT
+        // …then to lat/lon, matching xy()'s equirectangular scaling about ref.
+        val target = LatLng(
+            ref.latitude + north / M_PER_DEG_LAT,
+            ref.longitude + east / (M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude))),
+        )
+        return Selection(target, bearing, alongMax - alongMin, crossMax - crossMin, k)
     }
 
     companion object {

@@ -66,19 +66,36 @@ class RouteFramingTest {
         keys.zipWithNext { a, b -> assertTrue(b >= a, "key went backwards: $a -> $b") }
     }
 
-    /** Asserts the selection frames [prev]→[next]: midpoint target, span, and bearing. */
+    /**
+     * Asserts the selection frames [prev]→[next]: travel bearing, and that both stops fall
+     * inside the framed window. The window boxes the *road* between the stops, so its span is
+     * at least the straight chord (more where the road curves) and both stops sit within it.
+     */
     private fun assertStop(sel: RouteFraming.Selection, prev: DoubleArray, next: DoubleArray) {
-        val expectedMid = midpoint(prev, next)
-        assertEquals(expectedMid[0], sel.target.latitude, 1e-6, "target latitude")
-        assertEquals(expectedMid[1], sel.target.longitude, 1e-6, "target longitude")
-
         // Independent oracle: great-circle distance/bearing. Over a few hundred metres
         // these agree with the production equirectangular maths to well under a percent.
-        val gcSpan = haversineMeters(prev, next)
-        assertEquals(gcSpan, sel.spanMeters, gcSpan * 0.01, "span (metres)")
-
         val gcBearing = greatCircleBearing(prev, next)
         assertEquals(0.0, angleDiff(gcBearing, sel.bearing), 1.0, "bearing (degrees)")
+
+        // The road between the stops is never shorter (along travel) than the straight chord.
+        val gcSpan = haversineMeters(prev, next)
+        assertTrue(sel.spanMeters >= gcSpan - 1.0, "span ${sel.spanMeters} < chord $gcSpan")
+
+        // Both stops land inside the framed window centred on the target.
+        for (p in listOf(prev, next)) {
+            val (along, cross) = offsetFromTarget(sel, p[0], p[1])
+            assertTrue(Math.abs(along) <= sel.spanMeters / 2 + 1.0, "stop along $along outside window")
+            assertTrue(Math.abs(cross) <= sel.crossMeters / 2 + 1.0, "stop cross $cross outside window")
+        }
+    }
+
+    /** Along-/cross-travel offset (metres) of a point from the selection's target. */
+    private fun offsetFromTarget(sel: RouteFraming.Selection, lat: Double, lon: Double): Pair<Double, Double> {
+        val cosRef = cos(Math.toRadians(sel.target.latitude))
+        val east = (lon - sel.target.longitude) * 111_320.0 * cosRef
+        val north = (lat - sel.target.latitude) * 111_320.0
+        val t = Math.toRadians(sel.bearing)
+        return (east * sin(t) + north * cos(t)) to (east * cos(t) - north * sin(t))
     }
 
     companion object {
