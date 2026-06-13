@@ -74,6 +74,16 @@ def daytype(service_id):
     return service_id.rsplit(":", 1)[-1]
 
 
+def is_bus_line(line):
+    """The picker is for bus drivers: drop trams (digit-only < 100), metro (M1, M2…)
+    and trains (S1, S2…)."""
+    if line.isdigit() and int(line) < 100:
+        return False
+    if line[:1] in ("M", "S") and line[1:].isdigit():
+        return False
+    return True
+
+
 def build(feed, wanted_lines):
     """Returns {line: line_dict}. wanted_lines is a set of route_short_names, or None for all."""
     # routes: keep only the lines we want, indexed by route_id (== short_name in this feed,
@@ -266,14 +276,15 @@ def main():
                 fh.write(payload)
         manifest["lines"][line] = {"name": data["name"], "type": data["type"], "bytes": len(payload)}
 
-        by_day = {}  # day-type code -> set of brigades running that day
-        for service_id, brigades in data["services"].items():
-            by_day.setdefault(daytype(service_id), set()).update(brigades.keys())
-        select["lines"][line] = {
-            "name": data["name"],
-            "type": data["type"],
-            "brigades": {code: sorted(by_day[code]) for code in sorted(by_day)},
-        }
+        if is_bus_line(line):
+            by_day = {}  # day-type code -> set of brigades running that day
+            for service_id, brigades in data["services"].items():
+                by_day.setdefault(daytype(service_id), set()).update(brigades.keys())
+            select["lines"][line] = {
+                "name": data["name"],
+                "type": data["type"],
+                "brigades": {code: sorted(by_day[code]) for code in sorted(by_day)},
+            }
         print(f"  {line:>5}  {len(payload):>8} B  "
               f"{len(data['services'])} services  {len(data['shapes'])} shapes  "
               f"{len(data['stops'])} stops", file=sys.stderr)
