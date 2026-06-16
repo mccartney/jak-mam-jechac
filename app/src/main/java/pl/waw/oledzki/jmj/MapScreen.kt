@@ -103,6 +103,7 @@ private val FAKE_POINTS = listOf(
     doubleArrayOf(52.228323, 21.004010),
     doubleArrayOf(52.228328, 21.001824),
     doubleArrayOf(52.229336, 21.003154),
+    doubleArrayOf(52.182308, 21.068533),
 )
 
 /**
