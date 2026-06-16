@@ -23,15 +23,38 @@ class RouteFramingTest {
     private val starynkiewicza = doubleArrayOf(52.226023, 20.994585) // seq 23
     private val centralny = doubleArrayOf(52.229286, 21.003772) // seq 24
 
-    private val framing: RouteFraming = run {
-        // Fixtures live in src/test/resources (a real 504 half-trip), loaded off the classpath.
-        fun read(name: String): String =
-            javaClass.getResource("/$name")?.readText() ?: error("can't find /$name on the test classpath")
+    // Fixtures live in src/test/resources (a real 504 half-trip), loaded off the classpath.
+    private fun read(name: String): String =
+        javaClass.getResource("/$name")?.readText() ?: error("can't find /$name on the test classpath")
+
+    private fun framing(finalStageStart: Int = Int.MAX_VALUE): RouteFraming =
         RouteFraming.fromGeoJson(
             read("shape_504_kabaty_centralny.geojson"),
             read("stops_504_kabaty_centralny.geojson"),
+            finalStageStart,
         )
-    }
+
+    private val framing: RouteFraming = framing()
+
+    // 131 (Sadyba → Dw. Centralny, shape 3:831) — the terminus example with two "Dw. Centralny"
+    // posts. Stop coords taken verbatim from stops_131_sadyba_centralny.geojson.
+    private val centrum131 = doubleArrayOf(52.229590, 21.009960)    // seq 17 (the stop before the cluster)
+    private val dwCentralny02 = doubleArrayOf(52.228220, 21.003380) // seq 18 (first stop of the cluster)
+    private val dwCentralny21 = doubleArrayOf(52.229440, 21.003720) // seq 19 (final stop)
+
+    // The four debug fake-GPS points (MapScreen.FAKE_POINTS), all sampled from the 131 shape.
+    private val fakeA = doubleArrayOf(52.229545, 21.009889) // at Centrum
+    private val fakeB = doubleArrayOf(52.228323, 21.004010) // reaching the first Dw. Centralny
+    private val fakeC = doubleArrayOf(52.228328, 21.001824) // just past the first Dw. Centralny
+    private val fakeD = doubleArrayOf(52.229336, 21.003154) // between the two Dw. Centralny posts
+
+    // The terminus cluster on 131 is the trailing run of "Dw. Centralny" stops (seq 18, 19).
+    private fun framing131(): RouteFraming =
+        RouteFraming.fromGeoJson(
+            read("shape_131_sadyba_centralny.geojson"),
+            read("stops_131_sadyba_centralny.geojson"),
+            finalStageStart = 18,
+        )
 
     @Test
     fun `between two stops frames that exact pair`() {
@@ -66,6 +89,69 @@ class RouteFramingTest {
         keys.zipWithNext { a, b -> assertTrue(b >= a, "key went backwards: $a -> $b") }
     }
 
+    @Test
+    fun `final stage keeps the preceding stop while approaching the first terminus stop`() {
+        // Single-stop terminus (cluster = just Centralny, seq 24): approaching it from
+        // Starynkiewicza keeps that preceding stop in the window, under the approach sentinel.
+        val fr = framing(finalStageStart = 24)
+        val sel = fr.select(starynkiewicza[0], starynkiewicza[1])!!
+
+        assertEquals(25, sel.key, "approach sentinel, steady before the terminus")
+        // Both the preceding stop and the terminus sit inside the framed window.
+        assertInWindow(sel, starynkiewicza, centralny)
+    }
+
+    @Test
+    fun `final stage drops the preceding stop once the first terminus stop is behind us`() {
+        // Cluster begins at Starynkiewicza (seq 23). Standing at the last stop we're past that
+        // first cluster stop, so the window spans only the cluster (first such stop → last),
+        // under its own sentinel so the camera re-frames once when the preceding stop drops off.
+        val fr = framing(finalStageStart = 23)
+        val sel = fr.select(centralny[0], centralny[1])!!
+
+        assertEquals(26, sel.key, "group-only sentinel, distinct from the approach key")
+        // The first cluster stop and the final stop sit inside the framed window.
+        assertInWindow(sel, starynkiewicza, centralny)
+    }
+
+    // One test per debug fake-GPS point, on the real 131 Sadyba → Dw. Centralny trip:
+    // the two points before the first "Dw. Centralny" still see Centrum + both posts;
+    // the two beyond it frame only the cluster.
+
+    @Test
+    fun `131 fake point A (Centrum) frames Centrum and both Dw Centralny posts`() {
+        val sel = framing131().select(fakeA[0], fakeA[1])!!
+        assertEquals(20, sel.key, "approach sentinel = stops.size")
+        assertInWindow(sel, centrum131, dwCentralny02, dwCentralny21)
+    }
+
+    @Test
+    fun `131 fake point B (reaching first Dw Centralny) still frames Centrum and both posts`() {
+        val sel = framing131().select(fakeB[0], fakeB[1])!!
+        assertEquals(20, sel.key, "still approaching the first cluster stop")
+        assertInWindow(sel, centrum131, dwCentralny02, dwCentralny21)
+    }
+
+    @Test
+    fun `131 fake point C (past first Dw Centralny) frames only the cluster`() {
+        val sel = framing131().select(fakeC[0], fakeC[1])!!
+        assertEquals(21, sel.key, "group-only sentinel = stops.size + 1")
+        assertInWindow(sel, dwCentralny02, dwCentralny21)
+    }
+
+    @Test
+    fun `131 fake point D (between the two Dw Centralny posts) frames only the cluster`() {
+        val sel = framing131().select(fakeD[0], fakeD[1])!!
+        assertEquals(21, sel.key, "group-only sentinel")
+        assertInWindow(sel, dwCentralny02, dwCentralny21)
+    }
+
+    @Test
+    fun `tail beyond the last stop is empty when the shape ends at the terminus`() {
+        // The 504 fixture's shape ends at Dw. Centralny, so there's no next-trip manoeuvre to draw.
+        assertTrue(framing.tailBeyondLastStop().isEmpty())
+    }
+
     /**
      * Asserts the selection frames [prev]→[next]: travel bearing, and that both stops fall
      * inside the framed window. The window boxes the *road* between the stops, so its span is
@@ -83,6 +169,15 @@ class RouteFramingTest {
 
         // Both stops land inside the framed window centred on the target.
         for (p in listOf(prev, next)) {
+            val (along, cross) = offsetFromTarget(sel, p[0], p[1])
+            assertTrue(Math.abs(along) <= sel.spanMeters / 2 + 1.0, "stop along $along outside window")
+            assertTrue(Math.abs(cross) <= sel.crossMeters / 2 + 1.0, "stop cross $cross outside window")
+        }
+    }
+
+    /** Asserts every given (lat, lon) stop falls inside the selection's framed window. */
+    private fun assertInWindow(sel: RouteFraming.Selection, vararg points: DoubleArray) {
+        for (p in points) {
             val (along, cross) = offsetFromTarget(sel, p[0], p[1])
             assertTrue(Math.abs(along) <= sel.spanMeters / 2 + 1.0, "stop along $along outside window")
             assertTrue(Math.abs(cross) <= sel.crossMeters / 2 + 1.0, "stop cross $cross outside window")

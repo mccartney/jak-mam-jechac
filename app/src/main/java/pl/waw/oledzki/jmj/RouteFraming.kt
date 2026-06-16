@@ -24,6 +24,7 @@ class RouteFraming private constructor(
     private val stops: List<LatLng>,
     private val stopArc: DoubleArray,       // metres along the path for each stop
     private val ref: LatLng,
+    private val finalStageStart: Int,       // stop index at which the terminus cluster begins
 ) {
     /** How to frame the trip between the previous and next stop. */
     data class Selection(
@@ -60,21 +61,44 @@ class RouteFraming private constructor(
         var k = stopArc.indexOfFirst { it > s }
         if (k < 0) k = stops.lastIndex     // past the last stop
         if (k == 0) k = 1                  // before the first stop
-        val prev = stops[k - 1]
-        val next = stops[k]
-        val dx = (next.longitude - prev.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(prev.latitude))
-        val dy = (next.latitude - prev.latitude) * M_PER_DEG_LAT
+        // Final stage: once the next stop is the first of the terminus cluster (the trailing
+        // run of stops sharing the last stop's name), frame the whole remaining tail — the
+        // rest of the stops plus any shape beyond the last stop — as one steady window
+        // instead of the usual prev→next pair. While still approaching that first cluster stop
+        // we keep the preceding stop in view (e.g. Centrum + every Dw. Centralny); once it's
+        // behind us we drop it and frame only the cluster (first such stop → last). Two sentinel
+        // keys, both past every real stop index, so the camera re-frames once on entry and once
+        // when the preceding stop drops off, then holds still across the rest of the cluster.
+        if (k >= finalStageStart) {
+            val approaching = k == finalStageStart
+            val startIdx = if (approaching) (finalStageStart - 1).coerceAtLeast(0) else finalStageStart
+            return frame(
+                stops[startIdx], stops.last(), stopArc[startIdx], cum.last(),
+                if (approaching) stops.size else stops.size + 1,
+            )
+        }
+        return frame(
+            stops[k - 1], stops[k],
+            minOf(stopArc[k - 1], stopArc[k]), maxOf(stopArc[k - 1], stopArc[k]),
+            k,
+        )
+    }
+
+    /**
+     * Frames the road from [from] to [to], boxing every path vertex whose arc lies in
+     * [lo]..[hi] — not just the straight chord: a hairpin or loop between close stops
+     * bulges far past the chord and the bus rides that bulge, so chord-only framing would
+     * push the puck off-screen. The box is travel-up (along = up, cross = sideways);
+     * [key] identifies the framed segment so the camera only re-frames when it changes.
+     */
+    private fun frame(from: LatLng, to: LatLng, lo: Double, hi: Double, key: Int): Selection {
+        val dx = (to.longitude - from.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(from.latitude))
+        val dy = (to.latitude - from.latitude) * M_PER_DEG_LAT
         var bearing = Math.toDegrees(atan2(dx, dy))
         if (bearing < 0) bearing += 360.0
 
-        // Frame the *actual road* between the two stops, not just the straight chord: a
-        // hairpin or loop between close stops bulges far past the chord, and the bus (so
-        // the puck) rides that bulge — chord-only framing pushes it off-screen. Box the
-        // path between the stops in a travel-up frame (along = up, cross = sideways).
         val theta = Math.toRadians(bearing)
         val sinT = sin(theta); val cosT = cos(theta)
-        val lo = minOf(stopArc[k - 1], stopArc[k])
-        val hi = maxOf(stopArc[k - 1], stopArc[k])
         var alongMin = Double.MAX_VALUE; var alongMax = -Double.MAX_VALUE
         var crossMin = Double.MAX_VALUE; var crossMax = -Double.MAX_VALUE
         fun include(p: DoubleArray) {
@@ -83,8 +107,8 @@ class RouteFraming private constructor(
             alongMin = minOf(alongMin, along); alongMax = maxOf(alongMax, along)
             crossMin = minOf(crossMin, cross); crossMax = maxOf(crossMax, cross)
         }
-        include(xy(prev.latitude, prev.longitude, ref))
-        include(xy(next.latitude, next.longitude, ref))
+        include(xy(from.latitude, from.longitude, ref))
+        include(xy(to.latitude, to.longitude, ref))
         for (i in path.indices) if (cum[i] in lo..hi) include(path[i])
 
         val alongC = (alongMin + alongMax) / 2
@@ -97,8 +121,26 @@ class RouteFraming private constructor(
             ref.latitude + north / M_PER_DEG_LAT,
             ref.longitude + east / (M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude))),
         )
-        return Selection(target, bearing, alongMax - alongMin, crossMax - crossMin, k)
+        return Selection(target, bearing, alongMax - alongMin, crossMax - crossMin, key)
     }
+
+    /**
+     * The stretch of shape that runs past the final stop — the manoeuvre to where the next
+     * trip starts. Begins at the final stop and follows the path to its end; empty when the
+     * shape ends at the terminus (nothing to draw).
+     */
+    fun tailBeyondLastStop(): List<LatLng> {
+        val endArc = stopArc.lastOrNull() ?: return emptyList()
+        val tail = ArrayList<LatLng>()
+        tail += stops.last()
+        for (i in path.indices) if (cum[i] > endArc + 1.0) tail += toLatLng(path[i])
+        return if (tail.size >= 2) tail else emptyList()
+    }
+
+    private fun toLatLng(p: DoubleArray) = LatLng(
+        ref.latitude + p[1] / M_PER_DEG_LAT,
+        ref.longitude + p[0] / (M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude))),
+    )
 
     companion object {
         /**
@@ -118,8 +160,16 @@ class RouteFraming private constructor(
             return (zoom + ln(metersPerPixel / mppWanted) / ln(2.0)).coerceIn(11.0, 18.0)
         }
 
-        /** Builds the framing straight from a trip's GeoJSON (line + stops). */
-        fun fromGeoJson(routeGeoJson: String, stopsGeoJson: String): RouteFraming {
+        /**
+         * Builds the framing straight from a trip's GeoJSON (line + stops). [finalStageStart]
+         * is the index of the first stop in the terminus cluster; the default disables the
+         * final-stage framing (used by tests that exercise the plain prev→next behaviour).
+         */
+        fun fromGeoJson(
+            routeGeoJson: String,
+            stopsGeoJson: String,
+            finalStageStart: Int = Int.MAX_VALUE,
+        ): RouteFraming {
             val pathLL = readLineString(routeGeoJson)
             val stops = readPoints(stopsGeoJson)
             val ref = pathLL.first()
@@ -133,7 +183,7 @@ class RouteFraming private constructor(
             val stopArc = DoubleArray(stops.size) {
                 projectArc(path, cum, ref, stops[it].latitude, stops[it].longitude).first
             }
-            return RouteFraming(path, cum, stops, stopArc, ref)
+            return RouteFraming(path, cum, stops, stopArc, ref, finalStageStart)
         }
 
         private fun xy(lat: Double, lon: Double, ref: LatLng) = doubleArrayOf(

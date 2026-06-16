@@ -196,10 +196,31 @@ fun LineData.tripLineGeoJson(trip: Trip): String {
     return """{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coords]}}"""
 }
 
-/** A trip's stops as a GeoJSON Point FeatureCollection, in travel order. */
+/**
+ * A trip's stops as a GeoJSON Point FeatureCollection, in travel order. The final stop
+ * carries `role:final` so the map can paint the terminus a distinct colour.
+ */
 fun LineData.tripStopsGeoJson(trip: Trip): String {
-    val feats = trip.stopIds.mapNotNull { stops[it] }.joinToString(",") {
-        """{"type":"Feature","geometry":{"type":"Point","coordinates":[${it.lon},${it.lat}]}}"""
-    }
+    val pts = trip.stopIds.mapNotNull { stops[it] }
+    val feats = pts.mapIndexed { i, s ->
+        val props = if (i == pts.lastIndex) ""","properties":{"role":"final"}""" else ""
+        """{"type":"Feature","geometry":{"type":"Point","coordinates":[${s.lon},${s.lat}]}$props}"""
+    }.joinToString(",")
     return """{"type":"FeatureCollection","features":[$feats]}"""
+}
+
+/**
+ * Index of the first stop in the terminus cluster: the trailing run of stops sharing the
+ * final stop's name (e.g. both `Dw. Centralny` posts). The map switches to whole-tail
+ * framing on approach to this stop. Returns the last index when the terminus is a single
+ * stop. Computed over the same name-bearing stops [tripStopsGeoJson] keeps, so the index
+ * lines up with [RouteFraming]'s stop list.
+ */
+fun LineData.finalClusterStart(trip: Trip): Int {
+    val names = trip.stopIds.mapNotNull { stops[it]?.name }
+    if (names.isEmpty()) return 0
+    val last = names.last()
+    var i = names.lastIndex
+    while (i > 0 && names[i - 1] == last) i--
+    return i
 }

@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.location.Location
+import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,6 +42,7 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -58,8 +61,26 @@ private const val FRAME_FRACTION = 0.75
 private const val CAMERA_ANIM_MS = 800
 private const val ROUTE_SOURCE_ID = "route"
 private const val ROUTE_LAYER_ID = "route-line"
+private const val TAIL_SOURCE_ID = "route-tail"
+private const val TAIL_LAYER_ID = "route-tail-line"
 private const val STOPS_SOURCE_ID = "stops"
 private const val STOPS_LAYER_ID = "stops-circles"
+
+// Red for the run itself; green marks the terminus — the final stop and the bit of shape
+// past it where the next trip starts.
+private const val ROUTE_RED = "#B60000"
+private const val TERMINUS_GREEN = "#1B8A3A"
+
+// DEBUG: on-device GPS-spoofing apps won't reach our fused LocationEngine (see the
+// gps-spoofing memory), so when this is on we feed a looping fake track instead of the
+// real engine — cycling through FAKE_POINTS, one per second. Flip to false to use real GPS.
+private const val FAKE_LOCATION = false
+private val FAKE_POINTS = listOf(
+    doubleArrayOf(52.229545, 21.009889),
+    doubleArrayOf(52.228323, 21.004010),
+    doubleArrayOf(52.228328, 21.001824),
+    doubleArrayOf(52.229336, 21.003154),
+)
 
 // Empty geometry for a leg with no drawable shape (e.g. a depot move) — keeps source ids stable.
 private const val EMPTY_LINE = """{"type":"Feature","geometry":{"type":"LineString","coordinates":[]}}"""
@@ -72,6 +93,7 @@ private const val EMPTY_FC = """{"type":"FeatureCollection","features":[]}"""
 private class Leg(
     val routeGeoJson: String?,
     val stopsGeoJson: String?,
+    val tailGeoJson: String?,   // shape past the final stop, drawn green (null/empty if none)
     val framing: RouteFraming?,
 )
 
@@ -188,8 +210,27 @@ fun MapScreen(
 
             override fun onFailure(exception: Exception) = Unit
         }
-        requestLocationUpdates(engine, callback)
-        onDispose { engine.removeLocationUpdates(callback) }
+        if (FAKE_LOCATION) {
+            // Tick a synthetic fix once a second, cycling through FAKE_POINTS, into the same
+            // callback the real engine would use — so the puck, framing and leg-advance all run.
+            val handler = Handler(Looper.getMainLooper())
+            val tick = object : Runnable {
+                override fun run() {
+                    val now = System.currentTimeMillis()
+                    val p = FAKE_POINTS[((now / 7000) % FAKE_POINTS.size).toInt()]
+                    val loc = Location("fake").apply {
+                        latitude = p[0]; longitude = p[1]; time = now
+                    }
+                    callback.onSuccess(LocationEngineResult.create(loc))
+                    handler.postDelayed(this, 7000L)
+                }
+            }
+            handler.post(tick)
+            onDispose { handler.removeCallbacks(tick) }
+        } else {
+            requestLocationUpdates(engine, callback)
+            onDispose { engine.removeLocationUpdates(callback) }
+        }
     }
 }
 
@@ -264,26 +305,39 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
         val route = data.tripLineGeoJson(trip)
         val stops = data.tripStopsGeoJson(trip)
         // A depot move may carry no shape; fromGeoJson throws on an empty path, so leave it undrawable.
-        val framing = runCatching { RouteFraming.fromGeoJson(route, stops) }.getOrNull()
+        val framing = runCatching {
+            RouteFraming.fromGeoJson(route, stops, data.finalClusterStart(trip))
+        }.getOrNull()
+        val tail = framing?.tailBeyondLastStop().orEmpty()
         Leg(
             routeGeoJson = if (framing != null) route else null,
             stopsGeoJson = if (framing != null) stops else null,
+            tailGeoJson = if (tail.size >= 2) lineStringGeoJson(tail) else null,
             framing = framing,
         )
     }
     return RoutePlan(legs)
 }
 
-/** Adds the route + stop layers the first time, then just swaps their data on later legs. */
+/** A GeoJSON LineString Feature for a polyline (used for the green terminus tail). */
+private fun lineStringGeoJson(points: List<LatLng>): String {
+    val coords = points.joinToString(",") { "[${it.longitude},${it.latitude}]" }
+    return """{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coords]}}"""
+}
+
+/** Adds the route + tail + stop layers the first time, then just swaps their data on later legs. */
 private fun setRoute(style: Style, leg: Leg) {
     val route = leg.routeGeoJson ?: EMPTY_LINE
+    val tail = leg.tailGeoJson ?: EMPTY_LINE
     val stops = leg.stopsGeoJson ?: EMPTY_FC
     val existing = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
     if (existing == null) {
         addRouteShape(style, route)
+        addRouteTail(style, tail)   // above the route line, below the stops
         addRouteStops(style, stops)
     } else {
         existing.setGeoJson(route)
+        style.getSourceAs<GeoJsonSource>(TAIL_SOURCE_ID)?.setGeoJson(tail)
         style.getSourceAs<GeoJsonSource>(STOPS_SOURCE_ID)?.setGeoJson(stops)
     }
 }
@@ -293,7 +347,7 @@ private fun addRouteShape(style: Style, geoJson: String) {
     style.addSource(GeoJsonSource(ROUTE_SOURCE_ID, geoJson))
     style.addLayer(
         LineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID).withProperties(
-            PropertyFactory.lineColor(Color.parseColor("#B60000")),
+            PropertyFactory.lineColor(Color.parseColor(ROUTE_RED)),
             PropertyFactory.lineWidth(6f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -301,14 +355,41 @@ private fun addRouteShape(style: Style, geoJson: String) {
     )
 }
 
-/** Marks each stop of the trip with a circle on top of the route line. */
+/** Draws the bit of shape past the final stop (the next-trip manoeuvre) in the terminus colour. */
+private fun addRouteTail(style: Style, geoJson: String) {
+    style.addSource(GeoJsonSource(TAIL_SOURCE_ID, geoJson))
+    style.addLayer(
+        LineLayer(TAIL_LAYER_ID, TAIL_SOURCE_ID).withProperties(
+            PropertyFactory.lineColor(Color.parseColor(TERMINUS_GREEN)),
+            PropertyFactory.lineWidth(6f),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+        ),
+    )
+}
+
+/**
+ * Marks each stop of the trip with a circle on top of the route line; the final stop
+ * (feature property `role:final`) is painted the terminus colour instead of red/white.
+ */
 private fun addRouteStops(style: Style, geoJson: String) {
+    val isFinal = Expression.eq(Expression.get("role"), Expression.literal("final"))
     style.addSource(GeoJsonSource(STOPS_SOURCE_ID, geoJson))
     style.addLayer(
         CircleLayer(STOPS_LAYER_ID, STOPS_SOURCE_ID).withProperties(
             PropertyFactory.circleRadius(6f),
-            PropertyFactory.circleColor(Color.WHITE),
-            PropertyFactory.circleStrokeColor(Color.parseColor("#B60000")),
+            PropertyFactory.circleColor(
+                Expression.switchCase(
+                    isFinal, Expression.color(Color.parseColor(TERMINUS_GREEN)),
+                    Expression.color(Color.WHITE),
+                ),
+            ),
+            PropertyFactory.circleStrokeColor(
+                Expression.switchCase(
+                    isFinal, Expression.color(Color.WHITE),
+                    Expression.color(Color.parseColor(ROUTE_RED)),
+                ),
+            ),
             PropertyFactory.circleStrokeWidth(3f),
         ),
     )
