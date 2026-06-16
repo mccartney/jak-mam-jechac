@@ -71,9 +71,10 @@ fun BrigadeSelectScreen(
     var brigade by rememberSaveable { mutableStateOf(saved?.brigade.orEmpty()) }
     var query by rememberSaveable { mutableStateOf("") }
     var showPicker by remember { mutableStateOf(false) }
+    var showAttributions by remember { mutableStateOf(false) }
 
     // The line/brigade index, cached on disk (see fetchBrigades).
-    var index by remember { mutableStateOf<List<LineInfo>?>(null) }
+    var index by remember { mutableStateOf<BrigadeIndex?>(null) }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         try {
@@ -99,7 +100,7 @@ fun BrigadeSelectScreen(
     }
 
     val day = ServiceDay.of(date)
-    val loaded = index
+    val loaded = index?.lines
     val selected = loaded?.firstOrNull { it.line == line }
     val filtered = remember(loaded, query) {
         val all = loaded ?: return@remember emptyList<LineInfo>()
@@ -160,7 +161,18 @@ fun BrigadeSelectScreen(
                     onConfirm(selection)
                 }
             }
+
+            // Required data/map credits, reachable from the very first screen.
+            item("attributions") {
+                TextButton(onClick = { showAttributions = true }) {
+                    Text(stringResource(R.string.attributions_link))
+                }
+            }
         }
+    }
+
+    if (showAttributions) {
+        AttributionsDialog(feedVersion = index?.feedVersion) { showAttributions = false }
     }
 
     if (showPicker) {

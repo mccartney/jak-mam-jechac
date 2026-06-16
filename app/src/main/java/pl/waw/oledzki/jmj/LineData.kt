@@ -44,6 +44,9 @@ data class LineInfo(
     fun brigades(day: ServiceDay): List<String> = brigadesByDay[day.code].orEmpty()
 }
 
+/** The picker index: the feed version (for attribution) plus the lines it lists. */
+data class BrigadeIndex(val feedVersion: String, val lines: List<LineInfo>)
+
 /** "HH:MM" → minutes since midnight, tolerant of hours >= 24 (after-midnight trips). */
 fun hhmmToMinutes(hhmm: String): Int {
     val (h, m) = hhmm.split(":")
@@ -86,7 +89,7 @@ private const val BRIGADES_TTL_MS = 24L * 60 * 60 * 1000
  * Fetches the line/brigade picker index, served from the on-disk cache while it's fresh.
  * [force] skips the freshness check to re-download now (the pull-to-refresh gesture).
  */
-suspend fun fetchBrigades(context: Context, force: Boolean = false): List<LineInfo> = withContext(Dispatchers.IO) {
+suspend fun fetchBrigades(context: Context, force: Boolean = false): BrigadeIndex = withContext(Dispatchers.IO) {
     val cache = context.cacheDir.resolve("brigades.json")
     val fresh = !force && cache.exists() && System.currentTimeMillis() - cache.lastModified() < BRIGADES_TTL_MS
     val bytes = if (fresh) {
@@ -99,9 +102,10 @@ suspend fun fetchBrigades(context: Context, force: Boolean = false): List<LineIn
     parseBrigades(bytes.decodeToString())
 }
 
-private fun parseBrigades(json: String): List<LineInfo> {
-    val lines = JSONObject(json).getJSONObject("lines")
-    return lines.keys().asSequence().map { line ->
+private fun parseBrigades(json: String): BrigadeIndex {
+    val root = JSONObject(json)
+    val lines = root.getJSONObject("lines")
+    val infos = lines.keys().asSequence().map { line ->
         val o = lines.getJSONObject(line)
         val byDay = o.getJSONObject("brigades")
         LineInfo(
@@ -113,6 +117,7 @@ private fun parseBrigades(json: String): List<LineInfo> {
             },
         )
     }.toList()
+    return BrigadeIndex(root.optString("feedVersion"), infos)
 }
 
 private fun download(url: String): ByteArray {

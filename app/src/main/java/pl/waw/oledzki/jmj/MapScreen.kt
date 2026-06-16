@@ -11,6 +11,9 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -18,8 +21,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -125,8 +130,8 @@ private class Leg(
     val framing: RouteFraming?,
 )
 
-/** The whole day-chain. */
-private class RoutePlan(val legs: List<Leg>)
+/** The whole day-chain, plus the feed version it came from (for attribution). */
+private class RoutePlan(val legs: List<Leg>, val feedVersion: String?)
 
 @Composable
 fun MapScreen(
@@ -175,18 +180,28 @@ fun MapScreen(
     // below can react to permission being granted at any time.
     var ready by remember { mutableStateOf<Pair<MapLibreMap, Style>?>(null) }
 
-    AndroidView(modifier = modifier, factory = {
-        mapView.apply {
-            getMapAsync { map ->
-                map.cameraPosition =
-                    CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
-                map.setStyle(OPENFREEMAP_STYLE) { style ->
-                    HIDDEN_STYLE_LAYERS.forEach { style.removeLayer(it) }
-                    ready = map to style
+    var showAttributions by remember { mutableStateOf(false) }
+
+    Box(modifier) {
+        AndroidView(modifier = Modifier.fillMaxSize(), factory = {
+            mapView.apply {
+                getMapAsync { map ->
+                    map.cameraPosition =
+                        CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
+                    map.setStyle(OPENFREEMAP_STYLE) { style ->
+                        HIDDEN_STYLE_LAYERS.forEach { style.removeLayer(it) }
+                        ready = map to style
+                    }
                 }
             }
+        })
+        AttributionBadge(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+            showAttributions = true
         }
-    })
+        if (showAttributions) {
+            AttributionsDialog(feedVersion = plan?.feedVersion) { showAttributions = false }
+        }
+    }
 
     // (Re)draw whenever the style is ready or the active leg changes.
     LaunchedEffect(ready, leg) {
@@ -347,7 +362,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
             framing = framing,
         )
     }
-    return RoutePlan(legs)
+    return RoutePlan(legs, data.feedVersion)
 }
 
 /** A GeoJSON LineString Feature for a polyline (used for the green terminus tail). */
