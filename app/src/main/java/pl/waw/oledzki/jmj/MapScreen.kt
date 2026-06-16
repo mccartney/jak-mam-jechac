@@ -14,6 +14,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -24,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
@@ -79,6 +82,8 @@ private const val DRIVER_ZOOM = 15.5
 // Fraction of the screen height the previous→next stop span should occupy
 // (3/4 → previous stop at 7/8·h, next stop at 1/8·h).
 private const val FRAME_FRACTION = 0.75
+// Straight-line metres to the leg's final stop within which the manual "next run" button shows.
+private const val TERMINUS_RADIUS = 500.0
 private const val CAMERA_ANIM_MS = 800
 private const val ROUTE_SOURCE_ID = "route"
 private const val ROUTE_LAYER_ID = "route-line"
@@ -86,11 +91,15 @@ private const val TAIL_SOURCE_ID = "route-tail"
 private const val TAIL_LAYER_ID = "route-tail-line"
 private const val STOPS_SOURCE_ID = "stops"
 private const val STOPS_LAYER_ID = "stops-circles"
+private const val PREVIEW_SOURCE_ID = "route-preview"
+private const val PREVIEW_LAYER_ID = "route-preview-line"
 
 // Red for the run itself; green marks the terminus — the final stop and the bit of shape
-// past it where the next trip starts.
+// past it where the next trip starts. The upcoming trip, previewed at the seam, is a muted
+// dashed grey, drawn beneath the red so the active run always reads on top.
 private const val ROUTE_RED = "#B60000"
 private const val TERMINUS_GREEN = "#1B8A3A"
+private const val PREVIEW_GREY = "#9AA0A6"
 
 // DEBUG: on-device GPS-spoofing apps won't reach our fused LocationEngine (see the
 // gps-spoofing memory), so we can feed a looping fake track instead of the real engine —
@@ -103,6 +112,7 @@ private val FAKE_POINTS = listOf(
     doubleArrayOf(52.228323, 21.004010),
     doubleArrayOf(52.228328, 21.001824),
     doubleArrayOf(52.229336, 21.003154),
+    doubleArrayOf(52.229423, 21.004364),
     doubleArrayOf(52.182308, 21.068533),
 )
 
@@ -131,8 +141,11 @@ private class Leg(
     val framing: RouteFraming?,
 )
 
-/** The whole day-chain, plus the feed version it came from (for attribution). */
-private class RoutePlan(val legs: List<Leg>, val feedVersion: String?)
+/**
+ * The whole day-chain: the renderable legs, the [DayPath] the [TripCursor] tracks position
+ * along to advance between them, and the feed version it came from (for attribution).
+ */
+private class RoutePlan(val legs: List<Leg>, val dayPath: DayPath?, val feedVersion: String?)
 
 @Composable
 fun MapScreen(
@@ -182,6 +195,9 @@ fun MapScreen(
     var ready by remember { mutableStateOf<Pair<MapLibreMap, Style>?>(null) }
 
     var showAttributions by remember { mutableStateOf(false) }
+    // The manual "next run" button only appears as we near the current run's terminus (the
+    // same proximity that previews the next trip), and hides as soon as it's used.
+    var nearTerminus by remember { mutableStateOf(false) }
 
     Box(modifier) {
         AndroidView(modifier = Modifier.fillMaxSize(), factory = {
@@ -198,6 +214,16 @@ fun MapScreen(
         })
         AttributionBadge(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
             showAttributions = true
+        }
+        // Manual override at the terminus: jump to the next run if the auto-advance hasn't
+        // (or shouldn't) fire. Only near the terminus, and gone once tapped — no double-tap.
+        if (nearTerminus && activeLeg + 1 < (plan?.legs?.size ?: 0)) {
+            Button(
+                onClick = { nearTerminus = false; onLegChange(activeLeg + 1) },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            ) {
+                Text(stringResource(R.string.map_next_trip))
+            }
         }
         if (showAttributions) {
             AttributionsDialog(feedVersion = plan?.feedVersion) { showAttributions = false }
@@ -218,11 +244,12 @@ fun MapScreen(
         val p = plan ?: return@DisposableEffect onDispose {}
         if (!locationGranted) return@DisposableEffect onDispose {}
         val current = p.legs.getOrNull(activeLeg) ?: return@DisposableEffect onDispose {}
-        val next = p.legs.getOrNull(activeLeg + 1)
-        // Auto-advance needs both legs drawable.
-        val advancer = if (current.framing != null && next?.framing != null)
-            LegAdvancer(current.framing, next.framing)
-        else null
+        // One cursor over the whole day, seeded at the leg the driver picked; it advances
+        // across termini from position + heading alone (no clock). Re-seeded whenever
+        // activeLeg changes, since this effect is keyed on it.
+        val cursor = p.dayPath?.let { TripCursor(it, activeLeg) }
+        updatePreview(style, p, null)            // start with no preview until the cursor asks for one
+        var lastPreview: Int? = null
 
         val component = enableLocation(map, style, context)
         val engine = LocationEngineDefault.getDefaultLocationEngine(context)
@@ -235,12 +262,23 @@ fun MapScreen(
             override fun onSuccess(result: LocationEngineResult) {
                 val location = result.lastLocation ?: return
                 component.forceLocationUpdate(location)
-                if (advancer != null &&
-                    advancer.onFix(location.latitude, location.longitude, location.time)
-                ) {
-                    onLegChange(activeLeg + 1)   // parent re-passes; the next leg takes over
-                    return
+                if (cursor != null) {
+                    val st = cursor.update(
+                        location.latitude, location.longitude,
+                        if (location.hasBearing()) location.bearing.toDouble() else null,
+                    )
+                    if (st.previewTrip != lastPreview) {
+                        updatePreview(style, p, st.previewTrip); lastPreview = st.previewTrip
+                    }
+                    if (st.activeTrip != activeLeg) {
+                        onLegChange(st.activeTrip)   // parent re-passes; the cursor re-seeds on the new leg
+                        return
+                    }
                 }
+                // Manual "next run" button shows once we're within reach of this leg's final
+                // stop — straight from the active leg's geometry, so it appears reliably at the
+                // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
+                nearTerminus = (current.framing?.locate(location)?.distToEnd ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
                 val sel = current.framing?.select(location) ?: return
                 if (sel.key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
@@ -348,6 +386,11 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
     }
     val serviceId = data.resolveServiceId(selection.date) ?: return null
     val chain = data.services[serviceId]?.get(selection.brigade) ?: return null
+    // The whole day as one arc-indexed path (depot moves with no shape collapse to a point);
+    // trip index == leg index, so the cursor's active trip is directly the active leg.
+    val dayPath = runCatching {
+        DayPath.build(chain.map { data.shapes[it.shape].orEmpty() })
+    }.getOrNull()
     val legs = chain.map { trip ->
         val route = data.tripLineGeoJson(trip)
         val stops = data.tripStopsGeoJson(trip)
@@ -363,7 +406,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
             framing = framing,
         )
     }
-    return RoutePlan(legs, data.feedVersion)
+    return RoutePlan(legs, dayPath, data.feedVersion)
 }
 
 /** A GeoJSON LineString Feature for a polyline (used for the green terminus tail). */
@@ -379,6 +422,7 @@ private fun setRoute(style: Style, leg: Leg) {
     val stops = leg.stopsGeoJson ?: EMPTY_FC
     val existing = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
     if (existing == null) {
+        addRoutePreview(style, EMPTY_LINE)   // beneath the route line, so the active run reads on top
         addRouteShape(style, route)
         addRouteTail(style, tail)   // above the route line, below the stops
         addRouteStops(style, stops)
@@ -387,6 +431,30 @@ private fun setRoute(style: Style, leg: Leg) {
         style.getSourceAs<GeoJsonSource>(TAIL_SOURCE_ID)?.setGeoJson(tail)
         style.getSourceAs<GeoJsonSource>(STOPS_SOURCE_ID)?.setGeoJson(stops)
     }
+}
+
+/**
+ * Sets the previewed next trip's shape (drawn dashed/grey beneath the active run while the
+ * cursor is near the seam), or clears it when [previewTrip] is null.
+ */
+private fun updatePreview(style: Style, plan: RoutePlan, previewTrip: Int?) {
+    val geo = previewTrip?.let { plan.legs.getOrNull(it)?.routeGeoJson } ?: EMPTY_LINE
+    style.getSourceAs<GeoJsonSource>(PREVIEW_SOURCE_ID)?.setGeoJson(geo)
+}
+
+/** Draws the upcoming trip faintly (dashed grey), as a heads-up at the terminus seam. */
+private fun addRoutePreview(style: Style, geoJson: String) {
+    style.addSource(GeoJsonSource(PREVIEW_SOURCE_ID, geoJson))
+    style.addLayer(
+        LineLayer(PREVIEW_LAYER_ID, PREVIEW_SOURCE_ID).withProperties(
+            PropertyFactory.lineColor(Color.parseColor(PREVIEW_GREY)),
+            PropertyFactory.lineWidth(5f),
+            PropertyFactory.lineOpacity(0.7f),
+            PropertyFactory.lineDasharray(arrayOf(2f, 2f)),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+        ),
+    )
 }
 
 /** Draws the trip's shape as a line on the map. */

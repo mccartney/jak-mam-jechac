@@ -21,6 +21,7 @@
     <string name="tab_mapa">Mapa</string>
     <string name="hint_pick_sluzba">Najpierw wybierz służbę</string>
     <string name="hint_pick_kurs">Najpierw wybierz kurs</string>
+    <string name="map_next_trip">Następny kurs</string>
     <string name="attributions_link">Źródła danych</string>
     <string name="attributions_title">Źródła danych i licencje</string>
     <string name="attributions_transit">Dane rozkładowe</string>
