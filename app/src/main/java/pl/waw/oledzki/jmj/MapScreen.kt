@@ -85,8 +85,9 @@ private const val TERMINUS_GREEN = "#1B8A3A"
 
 // DEBUG: on-device GPS-spoofing apps won't reach our fused LocationEngine (see the
 // gps-spoofing memory), so we can feed a looping fake track instead of the real engine —
-// cycling through FAKE_POINTS, one per 7 s. Hidden developer toggle, no UI; enable with
-//   adb shell settings put global jmj_fake_loc 1     (…0 turns it back off).
+// cycling through FAKE_POINTS, one per 7 s. Hidden developer toggle, no UI; the value is the
+// epoch-seconds the fake track stays on *until*, so it self-disarms. Enable for an hour with
+//   adb shell settings put global jmj_fake_loc $(date -d '+1 hour' +%s)   (…0 = off now).
 private const val FAKE_LOCATION_SETTING = "jmj_fake_loc"
 private val FAKE_POINTS = listOf(
     doubleArrayOf(52.229545, 21.009889),
@@ -95,9 +96,15 @@ private val FAKE_POINTS = listOf(
     doubleArrayOf(52.229336, 21.003154),
 )
 
-/** The hidden developer fake-GPS flag, read fresh so toggling via adb takes effect on the next leg. */
-private fun fakeLocationEnabled(context: Context): Boolean =
-    Settings.Global.getInt(context.contentResolver, FAKE_LOCATION_SETTING, 0) == 1
+/**
+ * The hidden developer fake-GPS flag. Settings.Global keeps no timestamp of its own, so the
+ * value *is* the epoch-seconds the fake track expires at; fake GPS is used until then, then
+ * self-disarms. Read fresh so toggling via adb takes effect on the next leg.
+ */
+private fun fakeLocationEnabled(context: Context): Boolean {
+    val expiresAtSec = Settings.Global.getLong(context.contentResolver, FAKE_LOCATION_SETTING, 0L)
+    return System.currentTimeMillis() < expiresAtSec * 1000L
+}
 
 // Empty geometry for a leg with no drawable shape (e.g. a depot move) — keeps source ids stable.
 private const val EMPTY_LINE = """{"type":"Feature","geometry":{"type":"LineString","coordinates":[]}}"""
