@@ -53,6 +53,17 @@ import org.maplibre.android.style.sources.GeoJsonSource
 private const val OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
 private val WARSAW = LatLng(52.2297, 21.0122)
 
+// Liberty draws rail-in-tunnel via these OpenMapTiles layers, with no depth filter — so the
+// underground tracks under stations like Dw. Centralny clutter the street view a bus driver
+// actually follows. Drop them so only ground level shows. removeLayer is a no-op if an id
+// goes away in a future style version.
+private val UNDERGROUND_RAIL_LAYERS = listOf(
+    "tunnel_major_rail",
+    "tunnel_major_rail_hatching",
+    "tunnel_transit_rail",
+    "tunnel_transit_rail_hatching",
+)
+
 // Startup zoom, used only until the first GPS fix lets us frame the stops.
 private const val DRIVER_ZOOM = 15.5
 // Fraction of the screen height the previous→next stop span should occupy
@@ -152,7 +163,10 @@ fun MapScreen(
             getMapAsync { map ->
                 map.cameraPosition =
                     CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
-                map.setStyle(OPENFREEMAP_STYLE) { style -> ready = map to style }
+                map.setStyle(OPENFREEMAP_STYLE) { style ->
+                    UNDERGROUND_RAIL_LAYERS.forEach { style.removeLayer(it) }
+                    ready = map to style
+                }
             }
         }
     })
