@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.location.Location
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -83,15 +84,20 @@ private const val ROUTE_RED = "#B60000"
 private const val TERMINUS_GREEN = "#1B8A3A"
 
 // DEBUG: on-device GPS-spoofing apps won't reach our fused LocationEngine (see the
-// gps-spoofing memory), so when this is on we feed a looping fake track instead of the
-// real engine — cycling through FAKE_POINTS, one per second. Flip to false to use real GPS.
-private const val FAKE_LOCATION = false
+// gps-spoofing memory), so we can feed a looping fake track instead of the real engine —
+// cycling through FAKE_POINTS, one per 7 s. Hidden developer toggle, no UI; enable with
+//   adb shell settings put global jmj_fake_loc 1     (…0 turns it back off).
+private const val FAKE_LOCATION_SETTING = "jmj_fake_loc"
 private val FAKE_POINTS = listOf(
     doubleArrayOf(52.229545, 21.009889),
     doubleArrayOf(52.228323, 21.004010),
     doubleArrayOf(52.228328, 21.001824),
     doubleArrayOf(52.229336, 21.003154),
 )
+
+/** The hidden developer fake-GPS flag, read fresh so toggling via adb takes effect on the next leg. */
+private fun fakeLocationEnabled(context: Context): Boolean =
+    Settings.Global.getInt(context.contentResolver, FAKE_LOCATION_SETTING, 0) == 1
 
 // Empty geometry for a leg with no drawable shape (e.g. a depot move) — keeps source ids stable.
 private const val EMPTY_LINE = """{"type":"Feature","geometry":{"type":"LineString","coordinates":[]}}"""
@@ -224,7 +230,7 @@ fun MapScreen(
 
             override fun onFailure(exception: Exception) = Unit
         }
-        if (FAKE_LOCATION) {
+        if (fakeLocationEnabled(context)) {
             // Tick a synthetic fix once a second, cycling through FAKE_POINTS, into the same
             // callback the real engine would use — so the puck, framing and leg-advance all run.
             val handler = Handler(Looper.getMainLooper())
