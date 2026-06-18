@@ -39,6 +39,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.engine.LocationEngine
 import org.maplibre.android.location.engine.LocationEngineCallback
 import org.maplibre.android.location.engine.LocationEngineDefault
@@ -80,6 +81,8 @@ private val HIDDEN_STYLE_LAYERS = listOf(
     "building-3d",
 )
 
+// How much to enlarge the location puck over its default size.
+private const val PUCK_SCALE = 1.3f
 // Startup zoom, used only until the first GPS fix lets us frame the stops.
 private const val DRIVER_ZOOM = 15.5
 // Fraction of the screen height the previous→next stop span should occupy
@@ -401,6 +404,15 @@ private fun enableLocation(map: MapLibreMap, style: Style, context: Context): Lo
         component.activateLocationComponent(
             LocationComponentActivationOptions.builder(context, style)
                 .useDefaultLocationEngine(false)       // we feed locations ourselves
+                .locationComponentOptions(
+                    // A bigger puck so the driver spots it at a glance on the move. The icon
+                    // scales between these two across the zoom range; raise both to enlarge it
+                    // uniformly (defaults are 0.6 / 1.0).
+                    LocationComponentOptions.builder(context)
+                        .minZoomIconScale(PUCK_SCALE)
+                        .maxZoomIconScale(PUCK_SCALE)
+                        .build(),
+                )
                 .build(),
         )
     }
