@@ -1,10 +1,10 @@
 # Jak mam jechać
 
-A navigation aid for Warsaw bus drivers: pick your line, brigade and day, and the map shows
-the route you're driving — the next stretch between stops framed ahead of you, advancing
-from one run to the next as you go.
+Pomoc nawigacyjna dla kierowców warszawskich autobusów: wybierasz linię, brygadę i dzień,
+a mapa pokazuje trasę, którą jedziesz — najbliższy odcinek między przystankami widoczny
+przed tobą, z płynnym przejściem z jednego kursu na następny w miarę jazdy.
 
-<img src="screenshot.jpg" alt="Map view following the route between stops" width="320">
+<img src="screenshot.jpg" alt="Widok mapy z trasą prowadzoną między przystankami" width="320">
 
 ## Źródła danych i licencje
 
