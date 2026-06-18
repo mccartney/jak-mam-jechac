@@ -57,6 +57,9 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.random.Random
 
 // OpenFreeMap's "Liberty" vector style — no API key, no usage limits.
 private const val OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
@@ -103,18 +106,29 @@ private const val PREVIEW_GREY = "#9AA0A6"
 
 // DEBUG: on-device GPS-spoofing apps won't reach our fused LocationEngine (see the
 // gps-spoofing memory), so we can feed a looping fake track instead of the real engine —
-// cycling through FAKE_POINTS, one per 7 s. Hidden developer toggle, no UI; the value is the
-// epoch-seconds the fake track stays on *until*, so it self-disarms. Enable for an hour with
+// cycling through the leg's fake points, one per 7 s. Hidden developer toggle, no UI; the
+// value is the epoch-seconds the fake track stays on *until*, so it self-disarms. Enable for
+// an hour with
 //   adb shell settings put global jmj_fake_loc $(date -d '+1 hour' +%s)   (…0 = off now).
 private const val FAKE_LOCATION_SETTING = "jmj_fake_loc"
-private val FAKE_POINTS = listOf(
-    doubleArrayOf(52.229545, 21.009889),
-    doubleArrayOf(52.228323, 21.004010),
-    doubleArrayOf(52.228328, 21.001824),
-    doubleArrayOf(52.229336, 21.003154),
-    doubleArrayOf(52.229423, 21.004364),
-    doubleArrayOf(52.182308, 21.068533),
+
+// A couple of lines have hand-placed fake spots; every other line gets a track generated
+// from the trip's own geometry (see [generateFakeTrack]).
+private val FAKE_POINTS_BY_LINE = mapOf(
+    "131" to listOf(
+        doubleArrayOf(52.229545, 21.009889),
+        doubleArrayOf(52.228323, 21.004010),
+        doubleArrayOf(52.228328, 21.001824),
+        doubleArrayOf(52.229336, 21.003154),
+        doubleArrayOf(52.229423, 21.004364),
+        doubleArrayOf(52.182308, 21.068533),
+    ),
+    "118" to listOf(
+        doubleArrayOf(52.232530, 21.037441),
+    ),
 )
+private const val FAKE_JITTER_M = 100.0   // ± random offset added to each generated point
+private const val M_PER_DEG_LAT = 111_320.0
 
 /**
  * The hidden developer fake-GPS flag. Settings.Global keeps no timestamp of its own, so the
@@ -124,6 +138,52 @@ private val FAKE_POINTS = listOf(
 private fun fakeLocationEnabled(context: Context): Boolean {
     val expiresAtSec = Settings.Global.getLong(context.contentResolver, FAKE_LOCATION_SETTING, 0L)
     return System.currentTimeMillis() < expiresAtSec * 1000L
+}
+
+/**
+ * The fake-GPS track to loop for a given trip: a hand-placed list for the lines that have one
+ * (see [FAKE_POINTS_BY_LINE]), otherwise generated from the trip's geometry.
+ */
+private fun fakeTrackFor(line: String, data: LineData, trip: Trip): List<DoubleArray> =
+    FAKE_POINTS_BY_LINE[line] ?: generateFakeTrack(data, trip)
+
+/**
+ * A default fake track: pick three random consecutive stops, sample five points evenly along
+ * the trip's shape between them, and jitter each by ±[FAKE_JITTER_M]. Falls back to the first
+ * stop alone when there isn't enough geometry.
+ */
+private fun generateFakeTrack(data: LineData, trip: Trip): List<DoubleArray> {
+    val shape = data.shapes[trip.shape].orEmpty()
+    val stops = trip.stopIds.mapNotNull { data.stops[it] }
+    if (stops.size < 3 || shape.size < 2) {
+        val s = stops.firstOrNull() ?: return emptyList()
+        return listOf(jitter(s.lat, s.lon))
+    }
+    val i = Random.nextInt(stops.size - 2)             // window start: stops i, i+1, i+2
+    val from = nearestVertex(shape, stops[i])
+    val to = nearestVertex(shape, stops[i + 2])
+    val lo = minOf(from, to); val hi = maxOf(from, to)
+    return (0..4).map { k ->
+        val idx = lo + (hi - lo) * k / 4               // k=0 → lo, k=4 → hi
+        jitter(shape[idx].latitude, shape[idx].longitude)
+    }
+}
+
+/** Index of the shape vertex closest to [stop] (degree-space is fine over a single trip). */
+private fun nearestVertex(shape: List<LatLng>, stop: Stop): Int {
+    var best = Double.MAX_VALUE; var bi = 0
+    for (j in shape.indices) {
+        val d = hypot(shape[j].latitude - stop.lat, shape[j].longitude - stop.lon)
+        if (d < best) { best = d; bi = j }
+    }
+    return bi
+}
+
+/** A point offset by up to ±[FAKE_JITTER_M] in each direction. */
+private fun jitter(lat: Double, lon: Double): DoubleArray {
+    val dLat = (Random.nextDouble() * 2 - 1) * FAKE_JITTER_M / M_PER_DEG_LAT
+    val dLon = (Random.nextDouble() * 2 - 1) * FAKE_JITTER_M / (M_PER_DEG_LAT * cos(Math.toRadians(lat)))
+    return doubleArrayOf(lat + dLat, lon + dLon)
 }
 
 // Empty geometry for a leg with no drawable shape (e.g. a depot move) — keeps source ids stable.
@@ -139,6 +199,7 @@ private class Leg(
     val stopsGeoJson: String?,
     val tailGeoJson: String?,   // shape past the final stop, drawn green (null/empty if none)
     val framing: RouteFraming?,
+    val fakeTrack: List<DoubleArray>,   // DEBUG: looped when fake GPS is on
 )
 
 /**
@@ -295,14 +356,15 @@ fun MapScreen(
 
             override fun onFailure(exception: Exception) = Unit
         }
-        if (fakeLocationEnabled(context)) {
-            // Tick a synthetic fix once a second, cycling through FAKE_POINTS, into the same
-            // callback the real engine would use — so the puck, framing and leg-advance all run.
+        if (fakeLocationEnabled(context) && current.fakeTrack.isNotEmpty()) {
+            // Tick a synthetic fix once a second, cycling through this leg's fake track, into the
+            // same callback the real engine would use — so the puck, framing and leg-advance all run.
+            val track = current.fakeTrack
             val handler = Handler(Looper.getMainLooper())
             val tick = object : Runnable {
                 override fun run() {
                     val now = System.currentTimeMillis()
-                    val p = FAKE_POINTS[((now / 7000) % FAKE_POINTS.size).toInt()]
+                    val p = track[((now / 7000) % track.size).toInt()]
                     val loc = Location("fake").apply {
                         latitude = p[0]; longitude = p[1]; time = now
                     }
@@ -404,6 +466,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
             stopsGeoJson = if (framing != null) stops else null,
             tailGeoJson = if (tail.size >= 2) lineStringGeoJson(tail) else null,
             framing = framing,
+            fakeTrack = fakeTrackFor(selection.line, data, trip),
         )
     }
     return RoutePlan(legs, dayPath, data.feedVersion)
