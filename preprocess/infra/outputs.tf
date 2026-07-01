@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Grzegorz Olędzki
+
 output "bucket" {
   value = aws_s3_bucket.data.bucket
 }

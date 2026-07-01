@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Grzegorz Olędzki
+
 terraform {
   required_version = ">= 1.6"
   required_providers {

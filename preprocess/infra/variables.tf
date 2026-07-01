@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Grzegorz Olędzki
+
 variable "region" {
   description = "AWS region (eu-central-1 / Frankfurt is closest to Warsaw)"
   type        = string

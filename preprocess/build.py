@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Grzegorz Olędzki
 """Turn the mkuran Warsaw GTFS feed into one compact JSON file per line.
 
 Reads the feed (a directory or the warsaw.zip directly) and emits, per line,

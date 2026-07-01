@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Grzegorz Olędzki
+
 package pl.waw.oledzki.jmj
 
 import org.maplibre.android.geometry.LatLng

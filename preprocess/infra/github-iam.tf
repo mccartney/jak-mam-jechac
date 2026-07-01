@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Grzegorz Olędzki
+
 # GitHub Actions deploys via OIDC — no stored AWS keys. The CI job presents a
 # short-lived OIDC token and assumes this role for ~1 h temporary credentials.
 

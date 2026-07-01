@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Grzegorz Olędzki
+
 # Public, read-only bucket serving the per-line JSON over HTTPS via the S3 REST
 # endpoint: the app GETs https://<bucket>.s3.<region>.amazonaws.com/lines/<line>.json.
 resource "aws_s3_bucket" "data" {
