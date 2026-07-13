@@ -36,10 +36,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.json.JSONObject
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.LocationComponentOptions
@@ -86,8 +88,11 @@ private val HIDDEN_STYLE_LAYERS = listOf(
 
 // How much to enlarge the location puck over its default size.
 private const val PUCK_SCALE = 1.3f
-// Startup zoom, used only until the first GPS fix lets us frame the stops.
+// Startup zoom, shown only until the route loads (then we frame the whole line) or the
+// first GPS fix lets us frame the stops.
 private const val DRIVER_ZOOM = 15.5
+// Screen-edge margin (dp) when framing the whole route before the first GPS fix.
+private const val ROUTE_BOUNDS_PADDING_DP = 32
 // Fraction of the screen height the previous→next stop span should occupy
 // (3/4 → previous stop at 7/8·h, next stop at 1/8·h).
 private const val FRAME_FRACTION = 0.75
@@ -247,6 +252,19 @@ fun MapScreen(
             )
         }
     }
+    // Re-check on every resume: the driver may grant the permission (or turn location on) from
+    // system settings, which the in-app dialog callback above never sees. Flipping this true
+    // re-keys the location effect below, which then starts the engine and follows the puck.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                locationGranted = PermissionsManager.areLocationPermissionsGranted(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val mapView = rememberMapViewWithLifecycle()
 
@@ -260,6 +278,10 @@ fun MapScreen(
     // Holds the map + loaded style once both are ready, so the location effect
     // below can react to permission being granted at any time.
     var ready by remember { mutableStateOf<Pair<MapLibreMap, Style>?>(null) }
+
+    // Until the first GPS fix arrives we frame the whole route; once it does, the location
+    // callback drives the camera into the current position and we stop re-framing the line.
+    var hasFix by remember { mutableStateOf(false) }
 
     var showAttributions by remember { mutableStateOf(false) }
     // The manual "next run" button only appears as we near the current run's terminus (the
@@ -299,8 +321,19 @@ fun MapScreen(
 
     // (Re)draw whenever the style is ready or the active leg changes.
     LaunchedEffect(ready, leg) {
-        val (_, style) = ready ?: return@LaunchedEffect
-        setRoute(style, leg ?: return@LaunchedEffect)
+        val (map, style) = ready ?: return@LaunchedEffect
+        val current = leg ?: return@LaunchedEffect
+        setRoute(style, current)
+        // No GPS yet → show the whole red line so the driver sees where the run goes. Once a
+        // fix lands, the location callback below zooms into position and this stops applying.
+        if (!hasFix && mapView.width > 0 && mapView.height > 0) {
+            current.routeGeoJson?.let { routeBounds(it) }?.let { bounds ->
+                val pad = (ROUTE_BOUNDS_PADDING_DP * context.resources.displayMetrics.density).toInt()
+                map.getCameraForLatLngBounds(bounds, intArrayOf(pad, pad, pad, pad))?.let {
+                    map.moveCamera(CameraUpdateFactory.newCameraPosition(it))
+                }
+            }
+        }
     }
 
     // Once the map is ready and permission is granted, start our own location updates:
@@ -328,6 +361,7 @@ fun MapScreen(
         val callback = object : LocationEngineCallback<LocationEngineResult> {
             override fun onSuccess(result: LocationEngineResult) {
                 val location = result.lastLocation ?: return
+                hasFix = true   // stop whole-route framing; GPS drives the camera from here
                 component.forceLocationUpdate(location)
                 if (cursor != null) {
                     val st = cursor.update(
@@ -485,6 +519,16 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
         )
     }
     return RoutePlan(legs, dayPath, data.feedVersion)
+}
+
+/** Bounds enclosing a GeoJSON LineString Feature's coordinates, or null if it has too few. */
+private fun routeBounds(geoJson: String): LatLngBounds? {
+    val coords = JSONObject(geoJson).getJSONObject("geometry").getJSONArray("coordinates")
+    if (coords.length() < 2) return null
+    val points = (0 until coords.length()).map {
+        val c = coords.getJSONArray(it); LatLng(c.getDouble(1), c.getDouble(0))
+    }
+    return LatLngBounds.Builder().includes(points).build()
 }
 
 /** A GeoJSON LineString Feature for a polyline (used for the green terminus tail). */
