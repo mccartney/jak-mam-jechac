@@ -7,6 +7,13 @@ resource "aws_s3_bucket" "data" {
   bucket = var.bucket_name
 }
 
+resource "aws_s3_bucket_versioning" "data" {
+  bucket = aws_s3_bucket.data.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 # Allow a public bucket policy (but never public ACLs).
 resource "aws_s3_bucket_public_access_block" "data" {
   bucket                  = aws_s3_bucket.data.id
