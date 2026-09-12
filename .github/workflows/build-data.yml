@@ -1,9 +1,9 @@
 name: build-data
 
-# Rebuild the per-line JSON from the daily mkuran feed and publish to S3.
+# Rebuild the per-line JSON from the daily zbiorkom.live feed and publish to S3.
 on:
   schedule:
-    - cron: "0 3 * * *" # daily, after mkuran's ~00:15 UTC rebuild
+    - cron: "0 3 * * *" # daily, after zbiorkom.live's ~00:15 UTC rebuild
   workflow_dispatch: {} # manual run from the Actions tab
 
 # OIDC: no stored AWS keys — the job assumes the deploy role for temp creds.
@@ -31,7 +31,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download feed
-        run: curl -fsSL -o warsaw.zip https://mkuran.pl/gtfs/warsaw.zip
+        run: curl -fsSL -o warsaw.zip https://cdn.zbiorkom.live/gtfs/warsaw.zip
 
       - name: Build per-line JSON
         run: python3 preprocess/build.py --feed warsaw.zip --out out

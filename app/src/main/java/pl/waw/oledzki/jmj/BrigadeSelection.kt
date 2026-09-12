@@ -7,9 +7,9 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * ZTM surface-network day-type, as it appears in the mkuran feed's service_id
- * suffix. Derived from the driving date — the feed's own calendar resolves the
- * actual service (and handles holidays), this is just the human-readable code.
+ * ZTM surface-network day-type. Derived from the driving date — the feed's own
+ * calendar resolves the actual service (and handles holidays), this is just the
+ * human-readable code the brigade picker groups by.
  */
 enum class ServiceDay(val code: String) {
     PcS("PcS"),   // poniedziałek–czwartek (Mon–Thu)

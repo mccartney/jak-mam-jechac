@@ -59,12 +59,17 @@ fun hhmmToMinutes(hhmm: String): Int {
 /** One scheduled stop along a trip. A bus's arrival==departure, so both may be equal. */
 data class StopTime(val stopId: String, val arr: String?, val dep: String?)
 
-/** One trip in a brigade's day. [exc] = 1 marks a non-revenue depot pull-out/in. */
+/**
+ * One trip in a brigade's day. [rev] is whether passengers can ride it at all, and
+ * [depot] which end sits in a depot — `"out"` (pull-out), `"in"` (pull-in), `"both"`,
+ * or null. Both are derived from the feed's per-stop boarding flags, the only honest
+ * source for this; see preprocess/build.py.
+ */
 data class Trip(
     val shape: String?,
     val head: String,
-    val varCode: String,
-    val exc: Int,
+    val rev: Boolean,
+    val depot: String?,
     val stops: List<StopTime>,
 ) {
     val stopIds: List<String> get() = stops.map { it.stopId }
@@ -182,8 +187,8 @@ private fun parseTrip(t: JSONObject): Trip {
     return Trip(
         shape = t.optString("shape").ifEmpty { null },
         head = t.optString("head"),
-        varCode = t.optString("var"),
-        exc = t.optInt("exc"),
+        rev = t.optInt("rev") == 1,
+        depot = t.optString("depot").ifEmpty { null },
         stops = List(s.length()) { parseStopTime(s.getJSONObject(it)) },
     )
 }

@@ -11,7 +11,7 @@ przed tobą, z płynnym przejściem z jednego kursu na następny w miarę jazdy.
 ### Dane rozkładowe
 
 - [Zarząd Transportu Miejskiego w Warszawie](https://ztm.waw.pl)
-- [GTFS: Mikołaj Kuranowski](https://mkuran.pl/gtfs/)
+- [GTFS: zbiorkom.live](https://zbiorkom.live/warsaw)
 - [Kształty tras: © OpenStreetMap (ODbL)](https://www.openstreetmap.org/copyright)
 
 ### Mapa

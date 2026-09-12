@@ -22,9 +22,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 /**
- * One credit we must display. The transit credits mirror the feed's own attributions.txt —
- * ZTM Warszawa (the authority), Mikołaj Kuranowski (who builds the GTFS) and OpenStreetMap
- * (the bus shapes, under ODbL). The basemap credits are the ones OpenFreeMap requires
+ * One credit we must display: ZTM Warszawa (the authority), zbiorkom.live (who builds the
+ * GTFS we consume) and OpenStreetMap (the bus shapes, under ODbL). Unlike the mkuran feed
+ * we used before, this one ships no attributions.txt and states no licence — the credit
+ * below is what the data plainly warrants, not what a licence asked for; terms are still
+ * to be confirmed with zbiorkom.live. The basemap credits are the ones OpenFreeMap requires
  * ("© OpenMapTiles · Data from OpenStreetMap"; OpenFreeMap itself is optional but included).
  * The City Hall / api.um.warszawa.pl credit is intentionally absent: it applies to the
  * realtime vehicle positions, which this app does not use. The schedule's feed version is
@@ -34,7 +36,7 @@ private data class Credit(val label: String, val url: String)
 
 private val TRANSIT_CREDITS = listOf(
     Credit("Zarząd Transportu Miejskiego w Warszawie", "https://ztm.waw.pl"),
-    Credit("GTFS: Mikołaj Kuranowski", "https://mkuran.pl/gtfs/"),
+    Credit("GTFS: zbiorkom.live", "https://zbiorkom.live/warsaw"),
     Credit("Kształty tras: © OpenStreetMap (ODbL)", "https://www.openstreetmap.org/copyright"),
 )
 private val BASEMAP_CREDITS = listOf(

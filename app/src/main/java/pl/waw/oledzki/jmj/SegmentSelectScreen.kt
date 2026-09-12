@@ -119,9 +119,9 @@ private fun SegmentRow(
     onClick: () -> Unit,
 ) {
     val tag = when {
-        trip.varCode == "TD" -> stringResource(R.string.segment_pullout)
-        trip.varCode == "TZ" -> stringResource(R.string.segment_pullin)
-        trip.exc == 1 -> stringResource(R.string.segment_nonrevenue)
+        trip.depot == "in" -> stringResource(R.string.segment_pullin)
+        trip.depot != null -> stringResource(R.string.segment_pullout)
+        !trip.rev -> stringResource(R.string.segment_nonrevenue)
         else -> null
     }
     Card(
@@ -160,12 +160,13 @@ private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
 }
 
 /**
- * The leg to pre-highlight. For today: the first leg not yet finished (arrival >= now),
- * i.e. the one in progress or the next up; else the last. For other dates the current
- * time says nothing, so just point at the first revenue run.
+ * The leg to pre-highlight, or -1 for none. Only today's date says anything: the first
+ * leg not yet finished (arrival >= now) is the one in progress or the next up; else the
+ * last. On any other date the clock is meaningless, and a highlight there reads as a
+ * pre-selection the driver never made — so highlight nothing.
  */
 private fun suggestedIndex(trips: List<Trip>, date: LocalDate): Int {
-    if (date != LocalDate.now()) return trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
+    if (date != LocalDate.now()) return -1
     val now = LocalTime.now().run { hour * 60 + minute }
     val i = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= now }
     return if (i >= 0) i else trips.lastIndex
