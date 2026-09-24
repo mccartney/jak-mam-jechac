@@ -135,12 +135,16 @@ class DayPath private constructor(
  */
 class TripCursor(
     private val day: DayPath,
-    startTrip: Int = 0,
+    private val startTrip: Int = 0,
 ) {
     /** What the map should show: the active trip, the next one while near the seam, on-route. */
     data class State(val activeTrip: Int, val previewTrip: Int?, val onRoute: Boolean)
 
     private var arc = day.tripStart(startTrip)
+    // The seeded trip is a floor: the driver picked it (or we advanced into it), so the cursor
+    // only ever moves forward from there. Without this, a bus still finishing the previous trip
+    // when "next run" is tapped matches that trip's tail in the backward window and reverts.
+    private val floorArc = day.tripStart(startTrip)
     private var committed = startTrip
     private var pending = startTrip
     private var pendingCount = 0
@@ -162,7 +166,7 @@ class TripCursor(
         val heading = if (!moved.isNaN() && moved >= MIN_MOVE) bearingBetween(anchorLat, anchorLon, lat, lon) else bearing
 
         val hit = day.project(
-            lat, lon, arc - WINDOW_BACK, arc + WINDOW_FWD,
+            lat, lon, maxOf(arc - WINDOW_BACK, floorArc), arc + WINDOW_FWD,
             MAX_LATERAL, heading, HEADING_TOL,
         )
         if (hit == null) {
@@ -181,7 +185,7 @@ class TripCursor(
         arc = hit.arc
 
         // Debounce seam crossings so a single stray fix can't flip the active trip.
-        val here = day.tripAt(arc)
+        val here = maxOf(day.tripAt(arc), startTrip)
         when {
             here == committed -> { pending = committed; pendingCount = 0 }
             here == pending -> if (++pendingCount >= CONFIRM) { committed = pending; pendingCount = 0 }

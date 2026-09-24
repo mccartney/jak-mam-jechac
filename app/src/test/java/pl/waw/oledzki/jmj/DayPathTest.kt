@@ -108,6 +108,18 @@ class DayPathTest {
     }
 
     @Test
+    fun `a manually picked next trip is not reverted while still finishing the previous one`() {
+        // Driver taps "next run" ~40 m before C, still rolling east on trip 1 (B→C). The new
+        // cursor is seeded on trip 2 (C→B), which shares the corridor in reverse. The last few
+        // eastbound fixes match trip 1's tail within the backward window — that must not drag
+        // the active trip back to 1.
+        val cursor = TripCursor(day, startTrip = 2)
+        val seen = leg(b, c, 100).drop(97).map { cursor.update(it[0], it[1]).activeTrip } +
+            leg(c, b, 8).map { cursor.update(it[0], it[1]).activeTrip }
+        assertTrue(seen.all { it == 2 }, "reverted to an earlier trip: $seen")
+    }
+
+    @Test
     fun `re-locks after a sustained detour and picks the bus back up`() {
         val cursor = TripCursor(day, startTrip = 0)
         leg(a, b, 8).forEach { cursor.update(it[0], it[1]) }
