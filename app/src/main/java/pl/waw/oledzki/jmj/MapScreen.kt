@@ -606,26 +606,27 @@ private fun addRouteTail(style: Style, geoJson: String) {
 }
 
 /**
- * Marks each stop of the trip with a circle on top of the route line; the final stop
- * (feature property `role:final`) is painted the terminus colour instead of red/white.
+ * Marks each stop of the trip with a circle on top of the route line: fixed stops are a
+ * solid red dot, request stops (`role:request`) a hollow white one with a red ring, and the
+ * final stop (`role:final`) is painted the terminus colour.
  */
 private fun addRouteStops(style: Style, geoJson: String) {
-    val isFinal = Expression.eq(Expression.get("role"), Expression.literal("final"))
+    val role = Expression.get("role")
+    val red = Expression.color(Color.parseColor(ROUTE_RED))
+    val white = Expression.color(Color.WHITE)
     style.addSource(GeoJsonSource(STOPS_SOURCE_ID, geoJson))
     style.addLayer(
         CircleLayer(STOPS_LAYER_ID, STOPS_SOURCE_ID).withProperties(
             PropertyFactory.circleRadius(6f),
             PropertyFactory.circleColor(
-                Expression.switchCase(
-                    isFinal, Expression.color(Color.parseColor(TERMINUS_GREEN)),
-                    Expression.color(Color.WHITE),
+                Expression.match(
+                    role, red,
+                    Expression.stop("final", Expression.color(Color.parseColor(TERMINUS_GREEN))),
+                    Expression.stop("request", white),
                 ),
             ),
             PropertyFactory.circleStrokeColor(
-                Expression.switchCase(
-                    isFinal, Expression.color(Color.WHITE),
-                    Expression.color(Color.parseColor(ROUTE_RED)),
-                ),
+                Expression.match(role, white, Expression.stop("request", red)),
             ),
             PropertyFactory.circleStrokeWidth(3f),
         ),

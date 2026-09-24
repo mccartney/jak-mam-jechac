@@ -64,11 +64,13 @@ def minutes(gtfs_time):
     return int(h) * 60 + int(m)
 
 
-def stop_entry(stop_id, arr, dep):
-    """Compact per-stop record: one time if arrival == departure, else both."""
-    if arr == dep:
-        return {"s": stop_id, "t": hhmm(arr)}
-    return {"s": stop_id, "a": hhmm(arr), "d": hhmm(dep)}
+def stop_entry(stop_id, arr, dep, on_request):
+    """Compact per-stop record: one time if arrival == departure, else both; "r":1 marks a
+    request stop (na żądanie)."""
+    e = {"s": stop_id, "t": hhmm(arr)} if arr == dep else {"s": stop_id, "a": hhmm(arr), "d": hhmm(dep)}
+    if on_request:
+        e["r"] = 1
+    return e
 
 
 def daytype(service_id):
@@ -145,7 +147,9 @@ def build(feed, wanted_lines):
             continue
         want_stops.add(st["stop_id"])
         trip["stops"].append(
-            (int(st["stop_sequence"]), st["stop_id"], st["arrival_time"], st["departure_time"])
+            (int(st["stop_sequence"]), st["stop_id"], st["arrival_time"], st["departure_time"],
+             # 3 = "coordinate with driver": a request stop (na żądanie)
+             st["pickup_type"] == "3" or st["drop_off_type"] == "3")
         )
 
     # stops: only the ones referenced.
@@ -196,7 +200,7 @@ def build(feed, wanted_lines):
         bucket = out[line]["services"].setdefault(trip["service"], {})
         used_services[line].add(trip["service"])
         trip["stops"].sort()  # by stop_sequence
-        for _seq, sid, _a, _d in trip["stops"]:
+        for _seq, sid, _a, _d, _r in trip["stops"]:
             used_stops[line].add(sid)
         if trip["shape"]:
             used_shapes[line].add(trip["shape"])
@@ -207,7 +211,7 @@ def build(feed, wanted_lines):
             "dir": trip["dir"],
             "exc": trip["exc"],
             "shape": trip["shape"],
-            "stops": [stop_entry(sid, a, d) for _seq, sid, a, d in trip["stops"]],
+            "stops": [stop_entry(sid, a, d, r) for _seq, sid, a, d, r in trip["stops"]],
             "_t": minutes(first_time) if trip["stops"] else 1 << 30,
         }
         bucket.setdefault(trip["brigade"], []).append(entry)

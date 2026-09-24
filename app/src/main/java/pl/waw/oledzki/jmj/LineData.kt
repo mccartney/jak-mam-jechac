@@ -56,8 +56,11 @@ fun hhmmToMinutes(hhmm: String): Int {
     return h.toInt() * 60 + m.toInt()
 }
 
-/** One scheduled stop along a trip. A bus's arrival==departure, so both may be equal. */
-data class StopTime(val stopId: String, val arr: String?, val dep: String?)
+/**
+ * One scheduled stop along a trip. A bus's arrival==departure, so both may be equal.
+ * [onRequest] marks a request stop (na żądanie) on this particular trip.
+ */
+data class StopTime(val stopId: String, val arr: String?, val dep: String?, val onRequest: Boolean = false)
 
 /** One trip in a brigade's day. [exc] = 1 marks a non-revenue depot pull-out/in. */
 data class Trip(
@@ -195,6 +198,7 @@ private fun parseStopTime(s: JSONObject): StopTime {
         stopId = s.getString("s"),
         arr = t ?: s.optString("a").ifEmpty { null },
         dep = t ?: s.optString("d").ifEmpty { null },
+        onRequest = s.optInt("r") == 1,
     )
 }
 
@@ -206,12 +210,17 @@ fun LineData.tripLineGeoJson(trip: Trip): String {
 
 /**
  * A trip's stops as a GeoJSON Point FeatureCollection, in travel order. The final stop
- * carries `role:final` so the map can paint the terminus a distinct colour.
+ * carries `role:final` so the map can paint the terminus a distinct colour; request stops
+ * carry `role:request` so they read differently from the fixed ones.
  */
 fun LineData.tripStopsGeoJson(trip: Trip): String {
-    val pts = trip.stopIds.mapNotNull { stops[it] }
-    val feats = pts.mapIndexed { i, s ->
-        val props = if (i == pts.lastIndex) ""","properties":{"role":"final"}""" else ""
+    val pts = trip.stops.mapNotNull { st -> stops[st.stopId]?.let { st to it } }
+    val feats = pts.mapIndexed { i, (st, s) ->
+        val props = when {
+            i == pts.lastIndex -> ""","properties":{"role":"final"}"""
+            st.onRequest -> ""","properties":{"role":"request"}"""
+            else -> ""
+        }
         """{"type":"Feature","geometry":{"type":"Point","coordinates":[${s.lon},${s.lat}]}$props}"""
     }.joinToString(",")
     return """{"type":"FeatureCollection","features":[$feats]}"""
