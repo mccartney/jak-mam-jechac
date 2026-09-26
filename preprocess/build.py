@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Grzegorz Olędzki
-"""Turn the mkuran Warsaw GTFS feed into one compact JSON file per line.
+"""Turn the Warsaw GTFS feed (436.pl fork of mkuran) into one compact JSON file per line.
 
 Reads the feed (a directory or the warsaw.zip directly) and emits, per line,
 everything the app needs to draw a brigade's day: deduped shapes & stops, plus
@@ -23,7 +23,7 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 
-FEED_URL = "https://mkuran.pl/gtfs/warsaw.zip"
+FEED_URL = "https://436.pl/gtfs/warsaw.zip"
 COORD_DP = 5  # ~1.1 m; plenty for drawing, and trims a lot of bytes
 
 
