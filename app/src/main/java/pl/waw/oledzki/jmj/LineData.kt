@@ -4,6 +4,7 @@
 package pl.waw.oledzki.jmj
 
 import android.content.Context
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -14,7 +15,7 @@ import java.time.LocalDate
 import java.util.zip.GZIPInputStream
 
 // Per-line JSON published by preprocess/build.py, served gzip-encoded from S3.
-private const val DATA_BASE_URL = "https://jak-mam-jechac-data.s3.eu-central-1.amazonaws.com"
+internal const val DATA_BASE_URL = "https://jak-mam-jechac-data.s3.eu-central-1.amazonaws.com"
 
 /** One line's schedule data — shapes and stops deduped, referenced by id from the trips. */
 data class LineData(
@@ -126,13 +127,18 @@ private fun parseBrigades(json: String): BrigadeIndex {
     return BrigadeIndex(root.optString("feedVersion"), infos)
 }
 
-private fun download(url: String): ByteArray {
+// Identifies the app version in the bucket's access logs, which is how we see what's in use.
+private val USER_AGENT =
+    "JakMamJechac/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}; Android ${Build.VERSION.RELEASE})"
+
+internal fun download(url: String): ByteArray {
     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 15_000
         readTimeout = 15_000
         // We ask for gzip ourselves, which disables HttpURLConnection's transparent
         // decode, so we decode the (always gzip-stored) body deterministically.
         setRequestProperty("Accept-Encoding", "gzip")
+        setRequestProperty("User-Agent", USER_AGENT)
     }
     try {
         val raw = conn.inputStream

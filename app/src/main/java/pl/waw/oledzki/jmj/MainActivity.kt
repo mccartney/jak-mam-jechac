@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
                     var legCount by remember { mutableStateOf<Int?>(null) }
 
                     Column(Modifier.padding(padding)) {
+                        UpdateBanner()
                         val leg = activeLeg
                         val count = legCount
                         TabRow(selectedTabIndex = dest.ordinal) {

@@ -83,6 +83,12 @@ fun AttributionsDialog(feedVersion: String?, onDismiss: () -> Unit) {
                     )
                 }
                 Section(R.string.attributions_basemap, BASEMAP_CREDITS, uri)
+                Text(
+                    stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         },
     )

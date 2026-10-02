@@ -27,4 +27,7 @@
     <string name="attributions_transit">Dane rozkładowe</string>
     <string name="attributions_basemap">Mapa</string>
     <string name="attributions_feed_version">Wersja rozkładu: %1$s</string>
+    <string name="app_version">Wersja aplikacji: %1$s</string>
+    <string name="update_available">Dostępna nowa wersja %1$s</string>
+    <string name="update_download">Pobierz</string>
 </resources>

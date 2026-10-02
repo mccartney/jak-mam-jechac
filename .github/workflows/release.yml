@@ -1,0 +1,62 @@
+name: release
+
+# Push a vX.Y.Z tag → signed APK on a GitHub Release, and app/version.json in S3
+# pointing at it, which installed apps poll to offer the update.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write # OIDC for the S3 deploy role
+  contents: write # create the release
+
+env:
+  BUCKET: jak-mam-jechac-data
+  AWS_REGION: eu-central-1
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full history + tags: versionName/versionCode come from git
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build signed APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.JMJ_KEYSTORE_BASE64 }}
+          JMJ_KEYSTORE: ${{ runner.temp }}/release.jks
+          JMJ_KEYSTORE_PASSWORD: ${{ secrets.JMJ_KEYSTORE_PASSWORD }}
+          JMJ_KEY_ALIAS: ${{ secrets.JMJ_KEY_ALIAS }}
+          JMJ_KEY_PASSWORD: ${{ secrets.JMJ_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$JMJ_KEYSTORE"
+          ./gradlew --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk jak-mam-jechac.apk
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$TAG" jak-mam-jechac.apk --generate-notes
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::214582020536:role/jak-mam-jechac-ci-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Same versionCode formula as app/build.gradle.kts.
+      - name: Publish version.json
+        run: |
+          printf '{"versionCode":%d,"versionName":"%s","url":"%s"}\n' \
+            "$(git rev-list --count HEAD)" "${TAG#v}" \
+            "https://github.com/${{ github.repository }}/releases/download/$TAG/jak-mam-jechac.apk" \
+            > version.json
+          aws s3 cp version.json "s3://$BUCKET/app/version.json" \
+            --content-type application/json \
+            --cache-control "public, max-age=300"

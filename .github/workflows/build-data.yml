@@ -44,9 +44,10 @@ jobs:
             gzip -c "$f" > "$f.gz" && mv "$f.gz" "$f"
           done
 
+      # app/ belongs to the release workflow; keep --delete off it.
       - name: Publish to S3
         run: |
-          aws s3 sync out/ "s3://$BUCKET/" --delete \
+          aws s3 sync out/ "s3://$BUCKET/" --delete --exclude "app/*" \
             --content-type application/json \
             --content-encoding gzip \
             --cache-control "public, max-age=3600"

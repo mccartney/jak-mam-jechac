@@ -4,6 +4,12 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// The nearest vX.Y.Z tag names the build; the commit count orders it (versionCode),
+// so a release is "newer" iff it was cut from later history. Falls back off-git.
+fun git(vararg args: String): String? = runCatching {
+    providers.exec { commandLine("git", *args) }.standardOutput.asText.get().trim()
+}.getOrNull()
+
 android {
     namespace = "pl.waw.oledzki.jmj"
     compileSdk = 34
@@ -12,14 +18,25 @@ android {
         applicationId = "pl.waw.oledzki.jmj"
         minSdk = 29        // Android 10
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = git("rev-list", "--count", "HEAD")?.toInt() ?: 1
+        versionName = git("describe", "--tags", "--match", "v*", "--dirty")?.removePrefix("v") ?: "0.0.0-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release key comes from the environment (CI secrets); without it the release APK is unsigned.
+    signingConfigs {
+        create("release") {
+            storeFile = System.getenv("JMJ_KEYSTORE")?.let(::file)
+            storePassword = System.getenv("JMJ_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("JMJ_KEY_ALIAS")
+            keyPassword = System.getenv("JMJ_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
+            if (System.getenv("JMJ_KEYSTORE") != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -35,6 +52,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
