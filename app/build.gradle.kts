@@ -35,6 +35,11 @@ android {
     }
 
     buildTypes {
+        // Debug builds are signed with the SDK debug key, so they can't update the release app.
+        // A separate package lets the two be installed side by side.
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             if (System.getenv("JMJ_KEYSTORE") != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
