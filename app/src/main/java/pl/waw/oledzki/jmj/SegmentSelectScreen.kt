@@ -119,8 +119,8 @@ private fun SegmentRow(
     onClick: () -> Unit,
 ) {
     val tag = when {
-        trip.varCode == "TD" -> stringResource(R.string.segment_pullout)
-        trip.varCode == "TZ" -> stringResource(R.string.segment_pullin)
+        trip.varCode.startsWith("TD") -> stringResource(R.string.segment_pullout)
+        trip.varCode.startsWith("TZ") -> stringResource(R.string.segment_pullin)
         trip.exc == 1 -> stringResource(R.string.segment_nonrevenue)
         else -> null
     }
