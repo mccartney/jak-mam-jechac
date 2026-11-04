@@ -5,6 +5,7 @@ package pl.waw.oledzki.jmj
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,8 @@ class MainActivity : ComponentActivity() {
                     // activeLeg auto-advances from the map at each terminus.
                     var activeLeg by remember { mutableStateOf<Int?>(null) }
                     var legCount by remember { mutableStateOf<Int?>(null) }
+                    // Back walks the flow leftwards (map → run → duty); only exits from the first tab.
+                    BackHandler(enabled = dest != Dest.SLUZBA) { dest = Dest.entries[dest.ordinal - 1] }
 
                     Column(Modifier.padding(padding)) {
                         UpdateBanner()
