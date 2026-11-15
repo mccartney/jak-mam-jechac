@@ -1,7 +1,7 @@
 name: release
 
-# Push a vX.Y.Z tag (or publish a release in the UI) → signed APK on a GitHub Release, and app/version.json in S3
-# pointing at it, which installed apps poll to offer the update.
+# Push a vX.Y.Z tag (or publish a release in the UI) → signed APK (sideload) and AAB (upload to Google Play by hand)
+# on a GitHub Release, and app/version.json in S3, which installed apps poll to show "new version available".
 on:
   push:
     tags: ["v*"]
@@ -28,7 +28,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Build signed APK
+      - name: Build signed APK and AAB
         env:
           KEYSTORE_BASE64: ${{ secrets.JMJ_KEYSTORE_BASE64 }}
           JMJ_KEYSTORE: ${{ runner.temp }}/release.jks
@@ -37,8 +37,9 @@ jobs:
           JMJ_KEY_PASSWORD: ${{ secrets.JMJ_KEY_PASSWORD }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > "$JMJ_KEYSTORE"
-          ./gradlew --no-daemon :app:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease
           cp app/build/outputs/apk/release/app-release.apk jak-mam-jechac.apk
+          cp app/build/outputs/bundle/release/app-release.aab jak-mam-jechac.aab
 
       - name: GitHub release
         env:
@@ -46,9 +47,9 @@ jobs:
         # A release made in the GitHub UI also pushes the tag; attach to it rather than fail.
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" jak-mam-jechac.apk --clobber
+            gh release upload "$TAG" jak-mam-jechac.apk jak-mam-jechac.aab --clobber
           else
-            gh release create "$TAG" jak-mam-jechac.apk --generate-notes
+            gh release create "$TAG" jak-mam-jechac.apk jak-mam-jechac.aab --generate-notes
           fi
 
       - uses: aws-actions/configure-aws-credentials@v6

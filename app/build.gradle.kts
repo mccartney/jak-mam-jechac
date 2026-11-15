@@ -12,12 +12,12 @@ fun git(vararg args: String): String? = runCatching {
 
 android {
     namespace = "pl.waw.oledzki.jmj"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "pl.waw.oledzki.jmj"
         minSdk = 29        // Android 10
-        targetSdk = 34
+        targetSdk = 36
         versionCode = git("rev-list", "--count", "HEAD")?.toInt() ?: 1
         versionName = git("describe", "--tags", "--match", "v*", "--dirty")?.removePrefix("v") ?: "0.0.0-dev"
 

@@ -3,10 +3,13 @@
 
 package pl.waw.oledzki.jmj
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +38,10 @@ private enum class Dest(val labelRes: Int) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge-to-edge is mandatory from targetSdk 35; Scaffold pads for the bars. The UI is always
+        // light (no dark scheme), so pin dark bar icons rather than following the system theme.
+        val light = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = light, navigationBarStyle = light)
         setContent {
             MaterialTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
