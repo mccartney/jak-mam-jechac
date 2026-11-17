@@ -1,3 +1,5 @@
+<img src="logo.svg" alt="Logo Jak mam jechać" width="120" align="right">
+
 # Jak mam jechać
 
 Pomoc nawigacyjna dla kierowców warszawskich autobusów: wybierasz linię, brygadę i dzień,
