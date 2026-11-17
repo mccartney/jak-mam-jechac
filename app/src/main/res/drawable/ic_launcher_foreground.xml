@@ -1,13 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Simple bus glyph centred in the 108dp adaptive-icon safe zone. -->
+<!-- JMJ bus front (jmj-option1-no-solaris.svg, 512 grid) scaled into the 108dp adaptive-icon safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:translateX="30" android:translateY="30">
+    <group android:scaleX="0.145" android:scaleY="0.145" android:translateX="16.880" android:translateY="14.705">
+        <path
+            android:fillColor="#17191B"
+            android:pathData="M68,167h16a13,13 0,0 1,13,13v62a13,13 0,0 1,-13,13h-16a13,13 0,0 1,-13,-13v-62a13,13 0,0 1,13,-13zM428,167h16a13,13 0,0 1,13,13v62a13,13 0,0 1,-13,13h-16a13,13 0,0 1,-13,-13v-62a13,13 0,0 1,13,-13zM76 180v-20q0-18 20-18h12v14H96q-7 0-7 8v16zm360 0v-20q0-18-20-18h-12v14h12q7 0 7 8v16z" />
+        <path
+            android:fillColor="#1C1E20"
+            android:pathData="M116,412h34a12,12 0,0 1,12,12v24a12,12 0,0 1,-12,12h-34a12,12 0,0 1,-12,-12v-24a12,12 0,0 1,12,-12zM362,412h34a12,12 0,0 1,12,12v24a12,12 0,0 1,-12,12h-34a12,12 0,0 1,-12,-12v-24a12,12 0,0 1,12,-12z" />
+        <path
+            android:fillColor="#FFBD00"
+            android:pathData="M100 120Q100 82 146 82h220q46 0 46 38v294q0 18-18 18H118q-18 0-18-18Z" />
+        <path
+            android:fillColor="#101315"
+            android:pathData="M100 160v-28q0-39 45-39h222q45 0 45 39v28Z" />
+        <path
+            android:fillColor="#252A2D"
+            android:pathData="M143,109h226a9,9 0,0 1,9,9v26a9,9 0,0 1,-9,9h-226a9,9 0,0 1,-9,-9v-26a9,9 0,0 1,9,-9z" />
+        <path
+            android:fillColor="#FFB900"
+            android:pathData="M215.36 141.59V135.08Q216.99 136.75 218.85 137.63Q220.71 138.51 222.59 138.51Q224.8 138.51 225.83 137.4Q226.86 136.3 226.86 133.88V119.52H219.98V114.57H232.48V133.88Q232.48 139.08 230.29 141.31Q228.11 143.55 223.11 143.55Q221.3 143.55 219.33 143.06Q217.36 142.56 215.36 141.59ZM243.4 114.57H250.1L253.49 127.04L256.86 114.57H263.6V143H258.77V120.22L255.76 132.66H251.28L248.23 120.22V143H243.4ZM272.32 141.59V135.08Q273.95 136.75 275.81 137.63Q277.67 138.51 279.55 138.51Q281.76 138.51 282.79 137.4Q283.82 136.3 283.82 133.88V119.52H276.94V114.57H289.44V133.88Q289.44 139.08 287.25 141.31Q285.07 143.55 280.07 143.55Q278.26 143.55 276.29 143.06Q274.32 142.56 272.32 141.59Z" />
+        <path
+            android:fillColor="#24292E"
+            android:pathData="M112 174q0-13 14-13h260q14 0 14 13v155q-65 20-144 10-78 10-144-10Z" />
+        <path
+            android:fillColor="#41484F" android:fillAlpha=".68"
+            android:pathData="M258 162h112L278 333h-92Z" />
+        <path
+            android:fillColor="#111416"
+            android:pathData="M112 312q49 12 66-4 18-20 46-9h66q30-12 48 8 17 17 62 5v25q-70 24-144 9-74 15-144-9Z" />
+        <path
+            android:fillColor="#E20B18"
+            android:pathData="M100 372h312v42q0 18-18 18H118q-18 0-18-18Z" />
+        <path
+            android:fillColor="#17191B"
+            android:pathData="M100 351q38 7 72 16l19 26h-91Zm312 0q-38 7-72 16l-19 26h91Z" />
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M9,4C5,4 2,5 2,9V31C2,32.7 2.9,34.2 4,35.2V39A2,2 0,0 0,6 41H8A2,2 0,0 0,10 39V36H38V39A2,2 0,0 0,40 41H42A2,2 0,0 0,44 39V35.2C45.1,34.2 46,32.7 46,31V9C46,5 43,4 39,4ZM8.5,28A2.5,2.5 0,1 1,6 30.5A2.5,2.5 0,0 1,8.5 28ZM39.5,28A2.5,2.5 0,1 1,37 30.5A2.5,2.5 0,0 1,39.5 28ZM6,9H42V22H6Z" />
+            android:pathData="M119 366q28 3 47 11l10 12q-30-2-57-12Z M393 366q-28 3-47 11l-10 12q30-2 57-12Z" />
     </group>
 </vector>

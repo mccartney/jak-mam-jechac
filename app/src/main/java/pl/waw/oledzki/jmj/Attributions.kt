@@ -3,6 +3,7 @@
 
 package pl.waw.oledzki.jmj
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -68,6 +70,7 @@ fun AttributionsDialog(feedVersion: String?, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
         },
+        icon = { Image(painterResource(R.drawable.ic_logo), contentDescription = null) },
         title = { Text(stringResource(R.string.attributions_title)) },
         text = {
             Column(
