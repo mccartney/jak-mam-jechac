@@ -43,13 +43,19 @@ data class LineInfo(
     val line: String,
     val name: String,
     val type: Int,                                  // GTFS route_type (always 3/bus here)
-    val brigadesByDay: Map<String, List<String>>,   // ServiceDay.code -> brigades
+    val brigadesByDay: Map<String, List<String>>,   // day-type code -> brigades
 ) {
-    fun brigades(day: ServiceDay): List<String> = brigadesByDay[day.code].orEmpty()
+    fun brigades(dayType: String): List<String> = brigadesByDay[dayType].orEmpty()
 }
 
-/** The picker index: the feed version (for attribution) plus the lines it lists. */
-data class BrigadeIndex(val feedVersion: String, val lines: List<LineInfo>)
+/**
+ * The picker index: the feed version (for attribution), the day-type the feed runs on each
+ * date it covers (holidays included), and the lines it lists.
+ */
+data class BrigadeIndex(val feedVersion: String, val days: Map<String, String>, val lines: List<LineInfo>) {
+    /** The feed's day-type code for [date]; the weekday rule only outside the feed's window. */
+    fun dayType(date: LocalDate): String = days[date.toString()] ?: ServiceDay.of(date).code
+}
 
 /** "HH:MM" → minutes since midnight, tolerant of hours >= 24 (after-midnight trips). */
 fun hhmmToMinutes(hhmm: String): Int {
@@ -124,7 +130,10 @@ private fun parseBrigades(json: String): BrigadeIndex {
             },
         )
     }.toList()
-    return BrigadeIndex(root.optString("feedVersion"), infos)
+    // Absent from indexes built before it was added; dayType() then falls back to the weekday.
+    val days = root.optJSONObject("days")
+        ?.let { d -> d.keys().asSequence().associateWith { d.getString(it) } }.orEmpty()
+    return BrigadeIndex(root.optString("feedVersion"), days, infos)
 }
 
 // Identifies the app version in the bucket's access logs, which is how we see what's in use.

@@ -55,8 +55,8 @@ import java.time.ZoneOffset
 
 /**
  * Lets the driver pick date → line → brigade before the map opens. The date is the source
- * of truth (the day-type [ServiceDay] is derived from it). Line and brigade are chosen from
- * the brigades.json index — a searchable line list, then tappable brigade chips — so there
+ * of truth (the feed's calendar gives its day-type, holidays included). Line and brigade
+ * are chosen from the brigades.json index — a searchable line list, then tappable brigade chips — so there
  * is no error-prone free-text entry.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,7 +102,7 @@ fun BrigadeSelectScreen(
         refreshing = false
     }
 
-    val day = ServiceDay.of(date)
+    val day = index?.dayType(date) ?: ServiceDay.of(date).code
     val loaded = index?.lines
     val selected = loaded?.firstOrNull { it.line == line }
     val filtered = remember(loaded, query) {
@@ -218,14 +218,14 @@ private fun DateField(date: LocalDate, onClick: () -> Unit) {
     }
 }
 
-/** The day-type, derived from the date above (informational). */
+/** The day-type the feed runs on the date above (informational). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ServiceDayRow(day: ServiceDay) {
+private fun ServiceDayRow(day: String) {
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         ServiceDay.entries.forEachIndexed { index, sd ->
             SegmentedButton(
-                selected = day == sd,
+                selected = day == sd.code,
                 onClick = {},
                 shape = SegmentedButtonDefaults.itemShape(index, ServiceDay.entries.size),
             ) { Text(sd.code) }
@@ -251,7 +251,7 @@ private fun LineRow(info: LineInfo, onClick: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 private fun LazyListScope.brigadeItems(
     info: LineInfo,
-    day: ServiceDay,
+    day: String,
     brigade: String,
     onBrigade: (String) -> Unit,
     onChangeLine: () -> Unit,

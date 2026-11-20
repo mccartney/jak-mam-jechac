@@ -266,7 +266,9 @@ def main():
     # Small selection index for the app's picker: every line with its display name/type
     # and the brigades running on each day-type. One cached file spares the picker from
     # pulling a multi-MB line file just to list its brigades.
-    select = {"feedVersion": feed_version, "generated": generated, "lines": {}}
+    # "days" maps each date to the day-type the feed actually runs then, so the picker shows
+    # the right brigades on holidays (e.g. a Wednesday that runs NdS), not the weekday's.
+    select = {"feedVersion": feed_version, "generated": generated, "days": {}, "lines": {}}
     for line, data in sorted(lines.items()):
         data["feedVersion"] = feed_version
         payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -282,6 +284,8 @@ def main():
             by_day = {}  # day-type code -> set of brigades running that day
             for service_id, brigades in data["services"].items():
                 by_day.setdefault(daytype(service_id), set()).update(brigades.keys())
+                for date in data["calendar"].get(service_id, []):
+                    select["days"][date] = daytype(service_id)
             select["lines"][line] = {
                 "name": data["name"],
                 "type": data["type"],
