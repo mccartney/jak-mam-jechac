@@ -1,0 +1,15 @@
+{
+  "feedVersion": "2026-11-20",
+  "lines": {
+    "504": {
+      "name": "Os. Kabaty — Dw. Centralny",
+      "type": 3,
+      "bytes": 1697
+    },
+    "9": {
+      "name": "Tramwaj testowy",
+      "type": 0,
+      "bytes": 504
+    }
+  }
+}
