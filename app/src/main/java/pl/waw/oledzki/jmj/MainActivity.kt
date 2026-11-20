@@ -14,8 +14,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -43,13 +45,14 @@ private enum class Dest(val labelRes: Int) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Edge-to-edge is mandatory from targetSdk 35; Scaffold pads for the bars. The UI is always
+        // Edge-to-edge is mandatory from targetSdk 35; Scaffold pads for the bars and, in landscape, the
+        // camera cutout (safeDrawing; its default systemBars leaves the cutout uncovered). The UI is always
         // light (no dark scheme), so pin dark bar icons rather than following the system theme.
         val light = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = light, navigationBarStyle = light)
         setContent {
             MaterialTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+                Scaffold(Modifier.fillMaxSize(), contentWindowInsets = WindowInsets.safeDrawing) { padding ->
                     var dest by remember { mutableStateOf(Dest.SLUZBA) }
                     var selection by remember { mutableStateOf<BrigadeSelection?>(null) }
                     // The active run and the chain size, shown on the Kurs tab as "N/M".
