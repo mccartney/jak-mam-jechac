@@ -8,8 +8,8 @@ import java.time.LocalDate
 
 /**
  * ZTM surface-network day-type, as it appears in the mkuran feed's service_id
- * suffix. Derived from the driving date — the feed's own calendar resolves the
- * actual service (and handles holidays), this is just the human-readable code.
+ * suffix. [of] is only the weekday fallback for dates outside the feed's window; within it
+ * the feed's calendar gives the day-type (holidays included, see [BrigadeIndex.dayType]).
  */
 enum class ServiceDay(val code: String) {
     PcS("PcS"),   // poniedziałek–czwartek (Mon–Thu)
