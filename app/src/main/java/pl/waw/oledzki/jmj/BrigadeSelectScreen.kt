@@ -304,9 +304,9 @@ private fun LazyListScope.brigadeItems(
 
 // Lines and brigades: real numbers first in numeric order (1, 2, … 10, …), then any
 // alphanumeric ids (e.g. "M1", zero-padded depot brigades) after, alphabetically.
-private val lineOrder =
+internal val lineOrder =
     compareBy<LineInfo>({ it.line.toIntOrNull() == null }, { it.line.toIntOrNull() ?: 0 }, { it.line })
-private val brigadeOrder =
+internal val brigadeOrder =
     compareBy<String>({ it.toIntOrNull() == null }, { it.toIntOrNull() ?: 0 }, { it })
 
 /** The last confirmed selection, persisted so the form survives restarts within a shift. */
