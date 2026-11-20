@@ -25,7 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,12 +50,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    var dest by remember { mutableStateOf(Dest.SLUZBA) }
-                    var selection by remember { mutableStateOf<BrigadeSelection?>(null) }
+                    // Saveable, so a rotation or the system killing the app mid-route doesn't
+                    // drop the driver back on the first tab with the duty and run forgotten.
+                    var dest by rememberSaveable { mutableStateOf(Dest.SLUZBA) }
+                    var selection by rememberSaveable { mutableStateOf<BrigadeSelection?>(null) }
                     // The active run and the chain size, shown on the Kurs tab as "N/M".
                     // activeLeg auto-advances from the map at each terminus.
-                    var activeLeg by remember { mutableStateOf<Int?>(null) }
-                    var legCount by remember { mutableStateOf<Int?>(null) }
+                    var activeLeg by rememberSaveable { mutableStateOf<Int?>(null) }
+                    var legCount by rememberSaveable { mutableStateOf<Int?>(null) }
                     // Back walks the flow leftwards (map → run → duty); only exits from the first tab.
                     BackHandler(enabled = dest != Dest.SLUZBA) { dest = Dest.entries[dest.ordinal - 1] }
 
