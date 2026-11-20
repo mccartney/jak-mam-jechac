@@ -665,6 +665,12 @@ private fun rememberMapViewWithLifecycle(): MapView {
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
+            // Leaving the map tab disposes this while the activity is still resumed, so the map
+            // never saw ON_PAUSE/ON_STOP. onDestroy doesn't stop it for us: without onStop the
+            // compass sensor listener (RenderMode.COMPASS) and MapLibre's connectivity receiver
+            // stay registered, leaking this MapView on every visit.
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) mapView.onPause()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) mapView.onStop()
             mapView.onDestroy()
         }
     }
