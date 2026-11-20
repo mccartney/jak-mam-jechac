@@ -12,6 +12,7 @@ import org.maplibre.android.geometry.LatLng
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.GZIPInputStream
 
 // Per-line JSON published by preprocess/build.py, served gzip-encoded from S3.
@@ -83,20 +84,34 @@ data class Trip(
     val arrival: String? get() = stops.lastOrNull()?.let { it.arr ?: it.dep }
 }
 
-/** Fetches and parses a line, caching to disk so a later dead zone still renders. */
+// The schedule data rarely changes (schedules turn over ~every 10 days), so reuse the
+// cached copies for a day rather than re-downloading them on every visit to a screen.
+private const val DATA_TTL_MS = 24L * 60 * 60 * 1000
+
+// Parsed lines kept for the process, tagged with their cache file's mtime, so the run picker
+// and the map (and every revisit of either) share one multi-MB download and parse.
+private val parsedLines = ConcurrentHashMap<String, Pair<Long, LineData>>()
+
+/**
+ * Fetches and parses a line, caching to disk so a later dead zone still renders. The cached
+ * copy is reused while it's younger than [DATA_TTL_MS] and no older than the brigade index,
+ * so re-downloading the index (incl. pull-to-refresh) also refreshes the lines picked from it.
+ */
 suspend fun fetchLine(context: Context, line: String): LineData = withContext(Dispatchers.IO) {
     val cache = context.cacheDir.resolve("$line.json")
-    val bytes = try {
-        download("$DATA_BASE_URL/lines/$line.json").also { cache.writeBytes(it) }
+    val index = context.cacheDir.resolve("brigades.json")
+    val fresh = cache.exists() &&
+        System.currentTimeMillis() - cache.lastModified() < DATA_TTL_MS &&
+        cache.lastModified() >= index.lastModified()
+    if (!fresh) try {
+        cache.writeBytes(download("$DATA_BASE_URL/lines/$line.json"))
     } catch (e: Exception) {
-        if (cache.exists()) cache.readBytes() else throw e
+        if (!cache.exists()) throw e   // otherwise fall back to the copy we have
     }
-    parseLine(bytes.decodeToString())
+    val stamp = cache.lastModified()
+    parsedLines[line]?.takeIf { it.first == stamp }?.second
+        ?: parseLine(cache.readText()).also { parsedLines[line] = stamp to it }
 }
-
-// The brigade index rarely changes (schedules turn over ~every 10 days), so reuse the
-// cached copy for a day rather than re-downloading it on every visit to the picker.
-private const val BRIGADES_TTL_MS = 24L * 60 * 60 * 1000
 
 /**
  * Fetches the line/brigade picker index, served from the on-disk cache while it's fresh.
@@ -104,7 +119,7 @@ private const val BRIGADES_TTL_MS = 24L * 60 * 60 * 1000
  */
 suspend fun fetchBrigades(context: Context, force: Boolean = false): BrigadeIndex = withContext(Dispatchers.IO) {
     val cache = context.cacheDir.resolve("brigades.json")
-    val fresh = !force && cache.exists() && System.currentTimeMillis() - cache.lastModified() < BRIGADES_TTL_MS
+    val fresh = !force && cache.exists() && System.currentTimeMillis() - cache.lastModified() < DATA_TTL_MS
     val bytes = if (fresh) {
         cache.readBytes()
     } else try {
