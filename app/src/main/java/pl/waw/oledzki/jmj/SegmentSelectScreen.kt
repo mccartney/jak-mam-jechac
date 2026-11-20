@@ -31,7 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
-import java.time.LocalTime
+import java.time.LocalDateTime
 
 /**
  * Second step: the chosen brigade runs several legs across the day (depot pull-out,
@@ -164,9 +164,9 @@ private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
  * i.e. the one in progress or the next up; else the last. For other dates the current
  * time says nothing, so just point at the first revenue run.
  */
-private fun suggestedIndex(trips: List<Trip>, date: LocalDate): Int {
-    if (date != LocalDate.now()) return trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
-    val now = LocalTime.now().run { hour * 60 + minute }
-    val i = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= now }
+internal fun suggestedIndex(trips: List<Trip>, date: LocalDate, now: LocalDateTime = LocalDateTime.now()): Int {
+    if (date != now.toLocalDate()) return trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
+    val nowMin = now.hour * 60 + now.minute
+    val i = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= nowMin }
     return if (i >= 0) i else trips.lastIndex
 }

@@ -330,7 +330,7 @@ private fun saveSelection(context: Context, selection: BrigadeSelection) {
 private fun loadSelection(context: Context): BrigadeSelection? {
     val prefs = context.getSharedPreferences(SELECTION_PREFS, Context.MODE_PRIVATE)
     val savedAt = prefs.getLong(KEY_SAVED_AT, 0L)
-    if (savedAt == 0L || System.currentTimeMillis() - savedAt > REMEMBER_MS) return null
+    if (!isRemembered(savedAt, System.currentTimeMillis())) return null
     val date = prefs.getString(KEY_DATE, null) ?: return null
     return BrigadeSelection(
         line = prefs.getString(KEY_LINE, "").orEmpty(),
@@ -338,3 +338,6 @@ private fun loadSelection(context: Context): BrigadeSelection? {
         date = LocalDate.parse(date),
     )
 }
+
+/** Whether a selection saved at [savedAt] (epoch ms, 0 = never) is still within [REMEMBER_MS] of [now]. */
+internal fun isRemembered(savedAt: Long, now: Long): Boolean = savedAt != 0L && now - savedAt <= REMEMBER_MS
