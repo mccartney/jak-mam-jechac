@@ -20,7 +20,7 @@ resource "aws_iam_role" "deploy" {
   name = "jak-mam-jechac-ci-deploy"
 
   # Matching the full sub is what keeps forks and any other repo/branch/PR out:
-  # only main and v* tags of this exact repo can assume it.
+  # only main of this exact repo can assume it.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -28,15 +28,10 @@ resource "aws_iam_role" "deploy" {
       Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
+        # Only the data branch; the release workflow no longer touches AWS.
         StringEquals = {
           "${local.oidc_host}:aud" = "sts.amazonaws.com"
-        }
-        # The data branch, plus release tags (the release workflow writes app/version.json).
-        StringLike = {
-          "${local.oidc_host}:sub" = [
-            "repo:${var.github_repo}:ref:refs/heads/${var.github_branch}",
-            "repo:${var.github_repo}:ref:refs/tags/v*",
-          ]
+          "${local.oidc_host}:sub" = "repo:${var.github_repo}:ref:refs/heads/${var.github_branch}"
         }
       }
     }]

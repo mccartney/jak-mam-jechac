@@ -78,6 +78,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     implementation(libs.maplibre)
+    implementation(libs.play.app.update)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

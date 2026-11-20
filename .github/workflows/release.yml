@@ -1,18 +1,15 @@
 name: release
 
 # Push a vX.Y.Z tag (or publish a release in the UI) → signed APK (sideload) and AAB (upload to Google Play by hand)
-# on a GitHub Release, and app/version.json in S3, which installed apps poll to show "new version available".
+# on a GitHub Release. Installed apps learn about updates from Google Play (in-app updates), not from us.
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  id-token: write # OIDC for the S3 deploy role
   contents: write # create the release
 
 env:
-  BUCKET: jak-mam-jechac-data
-  AWS_REGION: eu-central-1
   TAG: ${{ github.ref_name }}
 
 jobs:
@@ -52,18 +49,3 @@ jobs:
             gh release create "$TAG" jak-mam-jechac.apk jak-mam-jechac.aab --generate-notes
           fi
 
-      - uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::214582020536:role/jak-mam-jechac-ci-deploy
-          aws-region: ${{ env.AWS_REGION }}
-
-      # Same versionCode formula as app/build.gradle.kts.
-      - name: Publish version.json
-        run: |
-          printf '{"versionCode":%d,"versionName":"%s","url":"%s"}\n' \
-            "$(git rev-list --count HEAD)" "${TAG#v}" \
-            "https://github.com/${{ github.repository }}/releases/download/$TAG/jak-mam-jechac.apk" \
-            > version.json
-          aws s3 cp version.json "s3://$BUCKET/app/version.json" \
-            --content-type application/json \
-            --cache-control "public, max-age=300"
