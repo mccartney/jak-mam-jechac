@@ -28,5 +28,9 @@
     <string name="attributions_basemap">Mapa</string>
     <string name="attributions_feed_version">Wersja rozkładu: %1$s</string>
     <string name="app_version">Wersja aplikacji: %1$s</string>
-    <string name="update_available">Dostępna nowa wersja %1$s</string>
+    <string name="update_available">Dostępna nowa wersja</string>
+    <string name="update_start">Aktualizuj</string>
+    <string name="update_downloading">Pobieranie aktualizacji…</string>
+    <string name="update_ready">Aktualizacja pobrana</string>
+    <string name="update_restart">Uruchom ponownie</string>
 </resources>
