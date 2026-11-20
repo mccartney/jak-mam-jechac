@@ -3,6 +3,7 @@
 
 package pl.waw.oledzki.jmj
 
+import java.io.Serializable
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -27,9 +28,12 @@ enum class ServiceDay(val code: String) {
     }
 }
 
-/** What the driver picks before navigating: a line's brigade on a given date. */
+/**
+ * What the driver picks before navigating: a line's brigade on a given date. Serializable so
+ * it survives activity recreation in saved state.
+ */
 data class BrigadeSelection(
     val line: String,
     val brigade: String,
     val date: LocalDate,
-)
+) : Serializable
