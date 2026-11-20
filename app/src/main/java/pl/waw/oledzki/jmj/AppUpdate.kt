@@ -3,7 +3,6 @@
 
 package pl.waw.oledzki.jmj
 
-import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult
 import androidx.compose.foundation.layout.Row
@@ -48,23 +47,22 @@ fun UpdateBanner() {
     val update by produceState<AppUpdateResult>(AppUpdateResult.NotAvailable) {
         manager.requestUpdateFlow().catch {}.collect { value = it }
     }
-    // "No thanks" in Play's dialog hides the offer until the next app start.
-    var declined by rememberSaveable { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(StartIntentSenderForResult()) {
-        if (it.resultCode != Activity.RESULT_OK) declined = true
-    }
+    // One offer per app start: after the tap, Play's dialog either starts the download (progress events
+    // take over the strip) or is declined, and "No thanks" shouldn't nag again until the next start.
+    var offered by rememberSaveable { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(StartIntentSenderForResult()) {}
     val scope = rememberCoroutineScope()
 
     when (val u = update) {
         is AppUpdateResult.Available -> when {
             // Reopened mid-download: the flow starts as Available until the next progress event.
             u.updateInfo.installStatus.isDownloading() -> Strip(R.string.update_downloading)
-            !declined && u.updateInfo.isFlexibleUpdateAllowed ->
-                Strip(R.string.update_available, R.string.update_start) { u.startFlexibleUpdate(launcher) }
+            !offered && u.updateInfo.isFlexibleUpdateAllowed ->
+                Strip(R.string.update_available, R.string.update_start) { offered = true; u.startFlexibleUpdate(launcher) }
         }
         // Also reports canceled/failed installs, which should just make the strip go away.
         is AppUpdateResult.InProgress ->
-            if (u.installState.installStatus().isDownloading()) Strip(R.string.update_downloading)
+            if (u.installState.installStatus.isDownloading()) Strip(R.string.update_downloading)
         is AppUpdateResult.Downloaded ->
             Strip(R.string.update_ready, R.string.update_restart) { scope.launch { runCatching { u.completeUpdate() } } }
         else -> {}
