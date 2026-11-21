@@ -304,9 +304,9 @@ private fun LazyListScope.brigadeItems(
 
 // Lines and brigades: real numbers first in numeric order (1, 2, … 10, …), then any
 // alphanumeric ids (e.g. "M1", zero-padded depot brigades) after, alphabetically.
-private val lineOrder =
+internal val lineOrder =
     compareBy<LineInfo>({ it.line.toIntOrNull() == null }, { it.line.toIntOrNull() ?: 0 }, { it.line })
-private val brigadeOrder =
+internal val brigadeOrder =
     compareBy<String>({ it.toIntOrNull() == null }, { it.toIntOrNull() ?: 0 }, { it })
 
 /** The last confirmed selection, persisted so the form survives restarts within a shift. */
@@ -330,7 +330,7 @@ private fun saveSelection(context: Context, selection: BrigadeSelection) {
 private fun loadSelection(context: Context): BrigadeSelection? {
     val prefs = context.getSharedPreferences(SELECTION_PREFS, Context.MODE_PRIVATE)
     val savedAt = prefs.getLong(KEY_SAVED_AT, 0L)
-    if (savedAt == 0L || System.currentTimeMillis() - savedAt > REMEMBER_MS) return null
+    if (!isRemembered(savedAt, System.currentTimeMillis())) return null
     val date = prefs.getString(KEY_DATE, null) ?: return null
     return BrigadeSelection(
         line = prefs.getString(KEY_LINE, "").orEmpty(),
@@ -338,3 +338,6 @@ private fun loadSelection(context: Context): BrigadeSelection? {
         date = LocalDate.parse(date),
     )
 }
+
+/** Whether a selection saved at [savedAt] (epoch ms, 0 = never) is still within [REMEMBER_MS] of [now]. */
+internal fun isRemembered(savedAt: Long, now: Long): Boolean = savedAt != 0L && now - savedAt <= REMEMBER_MS

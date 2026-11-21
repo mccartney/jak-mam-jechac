@@ -63,6 +63,9 @@ android {
     testOptions {
         unitTests.all { it.useJUnitPlatform() }
     }
+
+    // preprocess/build.py's golden output: the app parses exactly what the pipeline emits.
+    sourceSets["test"].resources.srcDir("../preprocess/tests/expected")
 }
 
 kotlin {

@@ -130,7 +130,7 @@ suspend fun fetchBrigades(context: Context, force: Boolean = false): BrigadeInde
     parseBrigades(bytes.decodeToString())
 }
 
-private fun parseBrigades(json: String): BrigadeIndex {
+internal fun parseBrigades(json: String): BrigadeIndex {
     val root = JSONObject(json)
     val lines = root.getJSONObject("lines")
     val infos = lines.keys().asSequence().map { line ->
@@ -173,7 +173,7 @@ internal fun download(url: String): ByteArray {
     }
 }
 
-private fun parseLine(json: String): LineData {
+internal fun parseLine(json: String): LineData {
     val o = JSONObject(json)
 
     val cal = o.getJSONObject("calendar")
@@ -213,7 +213,8 @@ private fun parseLine(json: String): LineData {
 private fun parseTrip(t: JSONObject): Trip {
     val s = t.getJSONArray("stops")
     return Trip(
-        shape = t.optString("shape").ifEmpty { null },
+        // isNull, not optString: on Android optString turns the pipeline's `"shape": null` into "null".
+        shape = if (t.isNull("shape")) null else t.getString("shape"),
         head = t.optString("head"),
         varCode = t.optString("var"),
         exc = t.optInt("exc"),
