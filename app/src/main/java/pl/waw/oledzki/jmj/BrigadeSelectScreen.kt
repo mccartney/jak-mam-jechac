@@ -94,12 +94,11 @@ fun BrigadeSelectScreen(
         }
     }
 
-    // Pull down past the top of the line list to re-download the index and wipe the form.
+    // Pull down past the top of the list to re-download the index; the form is left as it is.
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
     fun refresh() = scope.launch {
         refreshing = true
-        date = LocalDate.now(); line = ""; brigade = ""; query = ""; previous = null
         failed = false
         try {
             index = fetchBrigades(context, force = true)
@@ -121,7 +120,7 @@ fun BrigadeSelectScreen(
     }
 
     // The whole screen is one scrollable list inside the pull-to-refresh box, so pulling
-    // down from the very top (over the date field) re-downloads the index and clears the form.
+    // down from the very top (over the date field) re-downloads the index.
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { refresh() },
