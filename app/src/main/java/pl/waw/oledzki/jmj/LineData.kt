@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.maplibre.android.geometry.LatLng
+import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
@@ -104,7 +106,7 @@ suspend fun fetchLine(context: Context, line: String): LineData = withContext(Di
         System.currentTimeMillis() - cache.lastModified() < DATA_TTL_MS &&
         cache.lastModified() >= index.lastModified()
     if (!fresh) try {
-        cache.writeBytes(download("$DATA_BASE_URL/lines/$line.json"))
+        cache.writeAtomically(download("$DATA_BASE_URL/lines/$line.json"))
     } catch (e: Exception) {
         if (!cache.exists()) throw e   // otherwise fall back to the copy we have
     }
@@ -123,7 +125,7 @@ suspend fun fetchBrigades(context: Context, force: Boolean = false): BrigadeInde
     val bytes = if (fresh) {
         cache.readBytes()
     } else try {
-        download("$DATA_BASE_URL/brigades.json").also { cache.writeBytes(it) }
+        download("$DATA_BASE_URL/brigades.json").also { cache.writeAtomically(it) }
     } catch (e: Exception) {
         if (cache.exists()) cache.readBytes() else throw e
     }
@@ -154,6 +156,22 @@ internal fun parseBrigades(json: String): BrigadeIndex {
 // Identifies the app version in the bucket's access logs, which is how we see what's in use.
 private val USER_AGENT =
     "JakMamJechac/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}; Android ${Build.VERSION.RELEASE})"
+
+/**
+ * Replaces the file with [bytes] in one step (temp file + rename), so being killed mid-write
+ * can't leave a truncated cache that then fails to parse offline. A read-only cache file is a
+ * deliberately pinned side-load: refuse to replace it, just as a plain write would fail.
+ */
+private fun File.writeAtomically(bytes: ByteArray) {
+    if (exists() && !canWrite()) throw IOException("$name is read-only")
+    val tmp = File.createTempFile(name, ".part", parentFile)
+    try {
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(this)) throw IOException("couldn't replace $name")
+    } finally {
+        tmp.delete()   // no-op once renamed
+    }
+}
 
 internal fun download(url: String): ByteArray {
     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
