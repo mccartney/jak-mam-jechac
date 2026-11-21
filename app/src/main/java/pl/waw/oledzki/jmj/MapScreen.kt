@@ -372,6 +372,7 @@ fun MapScreen(
                 val location = result.lastLocation ?: return
                 hasFix = true   // stop whole-route framing; GPS drives the camera from here
                 component.forceLocationUpdate(location)
+                var legArc: Double? = null   // where along this leg, if the cursor matched the fix
                 if (cursor != null) {
                     val st = cursor.update(
                         location.latitude, location.longitude,
@@ -384,17 +385,25 @@ fun MapScreen(
                         onLegChange(st.activeTrip)   // parent re-passes; the cursor re-seeds on the new leg
                         return
                     }
+                    legArc = st.tripArc
                 }
                 // Manual "next run" button shows once we're within reach of this leg's final
                 // stop — straight from the active leg's geometry, so it appears reliably at the
                 // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
-                nearTerminus = (current.framing?.distToEnd(location) ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
-                val sel = current.framing?.select(location) ?: return
-                if (sel.key == lastSegment) return        // same segment → leave camera put
+                val framing = current.framing ?: return
+                nearTerminus = framing.distToEnd(location) <= TERMINUS_RADIUS
+                // The leg framing shares the day-path's projection, so the cursor's arc places us
+                // without a second full-path projection; only off-route (detour, not yet locked)
+                // fall back to projecting onto the leg.
+                val key = framing.segmentAt(
+                    legArc ?: framing.arcOf(location.latitude, location.longitude),
+                ) ?: return
+                if (key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
                 val width = mapView.width
+                val sel = framing.frameSegment(key)
                 if (height == 0 || width == 0 || sel.spanMeters <= 0.0) return
-                lastSegment = sel.key
+                lastSegment = key
                 map.animateCamera(
                     CameraUpdateFactory.newCameraPosition(
                         frameStops(map, sel, height / density, width / density),
@@ -523,7 +532,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
         val stops = data.tripStopsGeoJson(trip)
         // A depot move may carry no shape; fromGeoJson throws on an empty path, so leave it undrawable.
         val framing = runCatching {
-            RouteFraming.fromGeoJson(route, stops, data.finalClusterStart(trip))
+            RouteFraming.fromGeoJson(route, stops, data.finalClusterStart(trip), dayPath?.ref)
         }.getOrNull()
         val tail = framing?.tailBeyondLastStop().orEmpty()
         Leg(

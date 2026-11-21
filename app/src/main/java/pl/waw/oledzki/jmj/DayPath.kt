@@ -26,7 +26,7 @@ class DayPath private constructor(
     private val cum: DoubleArray,           // cumulative metres along the path at each vertex
     private val startArc: DoubleArray,      // arc at each trip's first vertex
     private val endArc: DoubleArray,        // arc at each trip's last vertex
-    private val ref: LatLng,
+    val ref: LatLng,                        // projection origin; a leg's RouteFraming anchored here shares arcs
 ) {
     val tripCount: Int get() = startArc.size
 
@@ -57,8 +57,7 @@ class DayPath private constructor(
         lat: Double, lon: Double, lo: Double, hi: Double,
         maxLateral: Double, heading: Double?, headingTol: Double,
     ): Hit? {
-        val px = (lon - ref.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude))
-        val py = (lat - ref.latitude) * M_PER_DEG_LAT
+        val (px, py) = xy(lat, lon, ref)
         var best = Double.MAX_VALUE
         var hit: Hit? = null
         for (i in 0 until path.size - 1) {
@@ -92,10 +91,7 @@ class DayPath private constructor(
             for ((t, trip) in trips.withIndex()) {
                 val first = path.size
                 for (ll in trip) {
-                    val p = doubleArrayOf(
-                        (ll.longitude - ref.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude)),
-                        (ll.latitude - ref.latitude) * M_PER_DEG_LAT,
-                    )
+                    val p = xy(ll.latitude, ll.longitude, ref)
                     if (path.isNotEmpty()) running += hypot(p[0] - path.last()[0], p[1] - path.last()[1])
                     path += p; cum += running
                 }
@@ -137,8 +133,12 @@ class TripCursor(
     private val day: DayPath,
     private val startTrip: Int = 0,
 ) {
-    /** What the map should show: the active trip, the next one while near the seam, on-route. */
-    data class State(val activeTrip: Int, val previewTrip: Int?, val onRoute: Boolean)
+    /**
+     * What the map should show: the active trip, the next one while near the seam, on-route,
+     * and [tripArc] — this fix's metres into the active trip, null when off route. Can exceed
+     * the trip's length while a seam crossing is still being debounced.
+     */
+    data class State(val activeTrip: Int, val previewTrip: Int?, val onRoute: Boolean, val tripArc: Double?)
 
     private var arc = day.tripStart(startTrip)
     // The seeded trip is a floor: the driver picked it (or we advanced into it), so the cursor
@@ -215,7 +215,7 @@ class TripCursor(
         val preview = if (committed < day.tripCount - 1 &&
             day.tripEnd(committed) - arc <= PREVIEW_DIST
         ) committed + 1 else null
-        return State(committed, preview, onRoute)
+        return State(committed, preview, onRoute, if (onRoute) arc - day.tripStart(committed) else null)
     }
 
     private companion object {
