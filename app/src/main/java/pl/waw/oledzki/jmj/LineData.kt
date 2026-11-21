@@ -72,12 +72,11 @@ fun hhmmToMinutes(hhmm: String): Int {
  */
 data class StopTime(val stopId: String, val arr: String?, val dep: String?, val onRequest: Boolean = false)
 
-/** One trip in a brigade's day. [exc] = 1 marks a non-revenue depot pull-out/in. */
+/** One trip in a brigade's day. */
 data class Trip(
     val shape: String?,
     val head: String,
     val varCode: String,
-    val exc: Int,
     val stops: List<StopTime>,
 ) {
     val stopIds: List<String> get() = stops.map { it.stopId }
@@ -235,7 +234,6 @@ private fun parseTrip(t: JSONObject): Trip {
         shape = if (t.isNull("shape")) null else t.getString("shape"),
         head = t.optString("head"),
         varCode = t.optString("var"),
-        exc = t.optInt("exc"),
         stops = List(s.length()) { parseStopTime(s.getJSONObject(it)) },
     )
 }

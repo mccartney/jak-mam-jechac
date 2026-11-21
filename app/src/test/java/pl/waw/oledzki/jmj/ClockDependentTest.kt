@@ -17,16 +17,16 @@ class ClockDependentTest {
     private val today = LocalDate.of(2026, 11, 20)
     private fun at(hhmm: String) = LocalDateTime.of(today, LocalTime.parse(hhmm))
 
-    private fun trip(dep: String, arr: String, exc: Int = 0) =
-        Trip(null, "", "", exc, listOf(StopTime("A", dep, dep), StopTime("B", arr, arr)))
+    private fun trip(dep: String, arr: String, varCode: String = "TP-X") =
+        Trip(null, "", varCode, listOf(StopTime("A", dep, dep), StopTime("B", arr, arr)))
 
     // pull-out, two revenue runs, a run past midnight, pull-in
     private val day = listOf(
-        trip("05:40", "05:50", exc = 1),
+        trip("05:40", "05:50", "TD-X"),
         trip("06:00", "06:31"),
         trip("06:40", "07:10"),
         trip("24:10", "24:40"),
-        trip("24:50", "25:05", exc = 1),
+        trip("24:50", "25:05", "TZ-X"),
     )
 
     @Test

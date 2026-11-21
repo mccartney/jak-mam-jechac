@@ -46,8 +46,7 @@ class PipelineContractTest {
     fun `brigade chain keeps pipeline order, depot moves included`() {
         assertEquals(listOf("1", "2"), pts.keys.sorted())
         val chain = pts.getValue("1")
-        assertEquals(listOf("TX-OUT", "TP-DWC", "TP-KAB", "TP-NIGHT", "TX-IN"), chain.map { it.varCode })
-        assertEquals(listOf(1, 0, 0, 0, 1), chain.map { it.exc })
+        assertEquals(listOf("TD-OUT", "TP-DWC", "TP-KAB", "TP-NIGHT", "TZ-IN"), chain.map { it.varCode })
         assertEquals("Dw. Centralny", chain[1].head)
     }
 

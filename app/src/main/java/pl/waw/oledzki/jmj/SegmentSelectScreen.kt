@@ -121,10 +121,11 @@ private fun SegmentRow(
     isNow: Boolean,
     onClick: () -> Unit,
 ) {
+    // Depot moves only, by variant prefix. GTFS `exceptional` is no guide to "no passengers":
+    // it also flags ordinary passenger runs on a non-standard variant (TX-…).
     val tag = when {
         trip.varCode.startsWith("TD") -> stringResource(R.string.segment_pullout)
         trip.varCode.startsWith("TZ") -> stringResource(R.string.segment_pullin)
-        trip.exc == 1 -> stringResource(R.string.segment_nonrevenue)
         else -> null
     }
     Card(
