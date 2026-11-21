@@ -68,6 +68,7 @@ fun SegmentSelectScreen(
     when {
         loading -> Centered(modifier) { CircularProgressIndicator() }
         failed -> Centered(modifier) { Text(stringResource(R.string.segment_error)) }
+        d != null && d.resolveServiceId(selection.date) == null -> Centered(modifier) { Text(stringResource(R.string.segment_no_date)) }
         d == null || trips.isNullOrEmpty() -> Centered(modifier) { Text(stringResource(R.string.segment_empty)) }
         else -> SegmentList(selection, d, trips, modifier) { onConfirm(it, trips.size) }
     }

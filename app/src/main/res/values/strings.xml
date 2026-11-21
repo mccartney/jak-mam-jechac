@@ -12,6 +12,7 @@
     <string name="select_segment">Który kurs?</string>
     <string name="segment_now">teraz</string>
     <string name="segment_error">Nie udało się wczytać rozkładu</string>
+    <string name="segment_no_date">Brak rozkładu na ten dzień</string>
     <string name="segment_empty">Brak kursów dla tej brygady</string>
     <string name="segment_pullout">wyjazd z zajezdni</string>
     <string name="segment_pullin">zjazd do zajezdni</string>
