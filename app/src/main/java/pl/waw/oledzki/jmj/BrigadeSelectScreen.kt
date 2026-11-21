@@ -76,7 +76,7 @@ fun BrigadeSelectScreen(
     var query by rememberSaveable { mutableStateOf("") }
     // "zmień" stashes the line/brigade it cleared, so Back can undo it until another line is picked.
     var previous by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
-    BackHandler(enabled = previous != null && line.isEmpty()) {
+    BackHandler(enabled = previous != null) {
         previous?.let { (l, b) -> line = l; brigade = b }
         previous = null; query = ""
     }
