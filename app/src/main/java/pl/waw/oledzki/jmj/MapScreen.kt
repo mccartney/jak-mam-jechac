@@ -99,6 +99,11 @@ private const val FRAME_FRACTION = 0.75
 // Straight-line metres to the leg's final stop within which the manual "next run" button shows.
 private const val TERMINUS_RADIUS = 500.0
 private const val CAMERA_ANIM_MS = 800
+// Battery: an uncapped map redraws at the display rate (60–120 Hz) whenever anything moves,
+// and with a fix every second the puck animation is effectively always running. The puck
+// animates at most this often; the map as a whole (incl. camera moves) renders at most this often.
+private const val PUCK_ANIMATION_FPS = 10
+private const val MAP_MAX_FPS = 30
 private const val ROUTE_SOURCE_ID = "route"
 private const val ROUTE_LAYER_ID = "route-line"
 private const val TAIL_SOURCE_ID = "route-tail"
@@ -292,6 +297,7 @@ fun MapScreen(
         AndroidView(modifier = Modifier.fillMaxSize(), factory = {
             mapView.apply {
                 getMapAsync { map ->
+                    setMaximumFps(MAP_MAX_FPS)   // renderer exists once the map is ready
                     map.cameraPosition =
                         CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
                     map.setStyle(OPENFREEMAP_STYLE) { style ->
@@ -400,7 +406,7 @@ fun MapScreen(
             override fun onFailure(exception: Exception) = Unit
         }
         if (fakeLocationEnabled(context) && current.fakeTrack.isNotEmpty()) {
-            // Tick a synthetic fix once a second, cycling through this leg's fake track, into the
+            // Tick a synthetic fix every 7 s, cycling through this leg's fake track, into the
             // same callback the real engine would use — so the puck, framing and leg-advance all run.
             val track = current.fakeTrack
             val handler = Handler(Looper.getMainLooper())
@@ -451,6 +457,9 @@ private fun enableLocation(map: MapLibreMap, style: Style, context: Context): Lo
                     LocationComponentOptions.builder(context)
                         .minZoomIconScale(PUCK_SCALE)
                         .maxZoomIconScale(PUCK_SCALE)
+                        // Battery: no extra animations re-rendering the map between fixes.
+                        .compassAnimationEnabled(false)
+                        .accuracyAnimationEnabled(false)
                         .build(),
                 )
                 .build(),
@@ -458,7 +467,11 @@ private fun enableLocation(map: MapLibreMap, style: Style, context: Context): Lo
     }
     component.isLocationComponentEnabled = true
     component.cameraMode = CameraMode.NONE          // custom framing drives the camera
-    component.renderMode = RenderMode.COMPASS       // arrow follows device heading
+    // Arrow follows the GPS bearing (direction of travel). Not COMPASS: that keeps the
+    // magnetometer running and redraws the map on every heading wobble — a battery drain,
+    // and a compass is unreliable in a metal bus anyway.
+    component.renderMode = RenderMode.GPS
+    component.setMaxAnimationFps(PUCK_ANIMATION_FPS)
     return component
 }
 
@@ -669,9 +682,9 @@ private fun rememberMapViewWithLifecycle(): MapView {
         onDispose {
             lifecycle.removeObserver(observer)
             // Leaving the map tab disposes this while the activity is still resumed, so the map
-            // never saw ON_PAUSE/ON_STOP. onDestroy doesn't stop it for us: without onStop the
-            // compass sensor listener (RenderMode.COMPASS) and MapLibre's connectivity receiver
-            // stay registered, leaking this MapView on every visit.
+            // never saw ON_PAUSE/ON_STOP. onDestroy doesn't stop it for us: without onStop
+            // MapLibre's connectivity receiver (and any sensor listener) stays registered,
+            // leaking this MapView on every visit.
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) mapView.onPause()
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) mapView.onStop()
             mapView.onDestroy()
