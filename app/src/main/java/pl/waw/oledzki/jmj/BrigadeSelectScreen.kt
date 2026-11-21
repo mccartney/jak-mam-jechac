@@ -28,10 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SelectableDates
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -133,8 +130,7 @@ fun BrigadeSelectScreen(
             contentPadding = PaddingValues(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item("date") { DateField(date) { showPicker = true } }
-            item("day") { ServiceDayRow(day) }
+            item("date") { DateField(date, day) { showPicker = true } }
 
             when {
                 loaded == null && !failed -> item("loading") {
@@ -223,34 +219,23 @@ private fun feedDates(index: BrigadeIndex?): SelectableDates {
     }
 }
 
-/** Read-only date field; the overlay box opens the picker (a click is otherwise swallowed). */
+/**
+ * Read-only date field, with the date's day-type (the feed's, else the weekday rule) as a static suffix.
+ * The overlay box opens the picker (a click is otherwise swallowed).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateField(date: LocalDate, onClick: () -> Unit) {
+private fun DateField(date: LocalDate, day: String, onClick: () -> Unit) {
     Box {
         OutlinedTextField(
             value = date.toString(),
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(R.string.select_date)) },
+            suffix = { Text(day) },
             modifier = Modifier.fillMaxWidth(),
         )
         Box(Modifier.matchParentSize().clickable(onClick = onClick))
-    }
-}
-
-/** The day-type the feed runs on the date above (informational). */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ServiceDayRow(day: String) {
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        ServiceDay.entries.forEachIndexed { index, sd ->
-            SegmentedButton(
-                selected = day == sd.code,
-                onClick = {},
-                shape = SegmentedButtonDefaults.itemShape(index, ServiceDay.entries.size),
-            ) { Text(sd.code) }
-        }
     }
 }
 
