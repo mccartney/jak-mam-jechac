@@ -388,7 +388,7 @@ fun MapScreen(
                 // Manual "next run" button shows once we're within reach of this leg's final
                 // stop — straight from the active leg's geometry, so it appears reliably at the
                 // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
-                nearTerminus = (current.framing?.locate(location)?.distToEnd ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
+                nearTerminus = (current.framing?.distToEnd(location) ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
                 val sel = current.framing?.select(location) ?: return
                 if (sel.key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
