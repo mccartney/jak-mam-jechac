@@ -58,10 +58,17 @@ class RouteFraming private constructor(
 
     fun select(location: Location): Selection? = select(location.latitude, location.longitude)
 
-    fun select(lat: Double, lon: Double): Selection? {
+    /**
+     * Frames by the nearest point of the whole trip. A road driven out and back is the same
+     * place on both passes, so this can't tell them apart; prefer [select] by arc when the
+     * position along the trip is known (the [TripCursor] tracks it in order, with heading).
+     */
+    fun select(lat: Double, lon: Double): Selection? = select(projectArc(path, cum, ref, lat, lon).first)
+
+    /** Frames the bus at [arc] metres along the trip's path. */
+    fun select(arc: Double): Selection? {
         if (stops.size < 2) return null
-        val s = projectArc(path, cum, ref, lat, lon).first
-        var k = stopArc.indexOfFirst { it > s }
+        var k = stopArc.indexOfFirst { it > arc }
         if (k < 0) k = stops.lastIndex     // past the last stop
         if (k == 0) k = 1                  // before the first stop
         // Final stage: once the next stop is the first of the terminus cluster (the trailing
@@ -167,15 +174,18 @@ class RouteFraming private constructor(
          * Builds the framing straight from a trip's GeoJSON (line + stops). [finalStageStart]
          * is the index of the first stop in the terminus cluster; the default disables the
          * final-stage framing (used by tests that exercise the plain prev→next behaviour).
+         * [origin] is the projection origin: pass the [DayPath]'s so arcs along this trip match
+         * the cursor's exactly (defaults to the path's first point).
          */
         fun fromGeoJson(
             routeGeoJson: String,
             stopsGeoJson: String,
             finalStageStart: Int = Int.MAX_VALUE,
+            origin: LatLng? = null,
         ): RouteFraming {
             val pathLL = readLineString(routeGeoJson)
             val stops = readPoints(stopsGeoJson)
-            val ref = pathLL.first()
+            val ref = origin ?: pathLL.first()
             val path = ArrayList<DoubleArray>(pathLL.size)
             val cum = DoubleArray(pathLL.size)
             for ((i, ll) in pathLL.withIndex()) {
@@ -183,10 +193,7 @@ class RouteFraming private constructor(
                 if (i > 0) cum[i] = cum[i - 1] +
                     hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1])
             }
-            val stopArc = DoubleArray(stops.size) {
-                projectArc(path, cum, ref, stops[it].latitude, stops[it].longitude).first
-            }
-            return RouteFraming(path, cum, stops, stopArc, ref, finalStageStart)
+            return RouteFraming(path, cum, stops, orderedStopArcs(path, cum, ref, stops), ref, finalStageStart)
         }
 
         private fun xy(lat: Double, lon: Double, ref: LatLng) = doubleArrayOf(
@@ -205,19 +212,56 @@ class RouteFraming private constructor(
             var best = Double.MAX_VALUE
             var bestArc = 0.0
             for (i in 0 until path.size - 1) {
-                val a = path[i]; val b = path[i + 1]
-                val abx = b[0] - a[0]; val aby = b[1] - a[1]
-                val len2 = abx * abx + aby * aby
-                val t = if (len2 == 0.0) 0.0
-                    else (((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / len2).coerceIn(0.0, 1.0)
-                val cx = a[0] + t * abx; val cy = a[1] + t * aby
-                val d = hypot(p[0] - cx, p[1] - cy)
-                if (d < best) {
-                    best = d
-                    bestArc = cum[i] + t * hypot(abx, aby)
-                }
+                val (arc, d) = onSegment(path, cum, i, p)
+                if (d < best) { best = d; bestArc = arc }
             }
             return bestArc to best
+        }
+
+        /** (arc, dist) of the point of segment [i] closest to [p] (projected metres). */
+        private fun onSegment(path: List<DoubleArray>, cum: DoubleArray, i: Int, p: DoubleArray): Pair<Double, Double> {
+            val a = path[i]; val b = path[i + 1]
+            val abx = b[0] - a[0]; val aby = b[1] - a[1]
+            val len2 = abx * abx + aby * aby
+            val t = if (len2 == 0.0) 0.0
+                else (((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / len2).coerceIn(0.0, 1.0)
+            return cum[i] + t * hypot(abx, aby) to hypot(p[0] - (a[0] + t * abx), p[1] - (a[1] + t * aby))
+        }
+
+        /**
+         * Each stop's arc along the path, keeping the stops in trip order. A trip that drives a
+         * road out and back passes a stop twice, and the nearer pass can be the wrong one (a
+         * stop served on the way back lands on the outbound pass). So instead of each stop's
+         * nearest point, take the in-order placement (stop i on a segment no earlier than stop
+         * i-1's) with the least total distance — exact, by dynamic programming over segments.
+         */
+        private fun orderedStopArcs(
+            path: List<DoubleArray>, cum: DoubleArray, ref: LatLng, stops: List<LatLng>,
+        ): DoubleArray {
+            val segs = path.size - 1
+            if (segs < 1 || stops.isEmpty()) return DoubleArray(stops.size)
+            val pts = stops.map { xy(it.latitude, it.longitude, ref) }
+            // cost[s]: least total distance for stops 0..i with stop i on segment s;
+            // from[i][s]: where stop i-1 then sits (the best segment at or before s).
+            val from = Array(stops.size) { IntArray(segs) }
+            var cost = DoubleArray(segs) { onSegment(path, cum, it, pts[0]).second }
+            for (i in 1 until stops.size) {
+                val next = DoubleArray(segs)
+                var best = Double.MAX_VALUE; var bestSeg = 0
+                for (s in 0 until segs) {
+                    if (cost[s] < best) { best = cost[s]; bestSeg = s }
+                    next[s] = best + onSegment(path, cum, s, pts[i]).second
+                    from[i][s] = bestSeg
+                }
+                cost = next
+            }
+            var s = cost.indices.minBy { cost[it] }
+            val arcs = DoubleArray(stops.size)
+            for (i in stops.indices.reversed()) {
+                arcs[i] = onSegment(path, cum, s, pts[i]).first
+                s = from[i][s]
+            }
+            return arcs
         }
 
         private fun readLineString(geoJson: String): List<LatLng> {

@@ -79,7 +79,7 @@ class DayPathTest {
     @Test
     fun `mid-trip there is no preview`() {
         val cursor = TripCursor(day, startTrip = 0)
-        var state = TripCursor.State(0, null, true)
+        var state = TripCursor.State(0, null, true, 0.0)
         leg(a, b, 12).take(6).forEach { state = cursor.update(it[0], it[1]) }   // half way up A→B
         assertEquals(0, state.activeTrip)
         assertNull(state.previewTrip, "no seam in sight mid-trip")
