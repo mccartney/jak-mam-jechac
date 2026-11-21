@@ -340,6 +340,9 @@ fun MapScreen(
     // move the puck, re-frame the camera, and auto-advance to the next leg at the terminus.
     // Re-keyed on activeLeg so each leg gets a fresh framing + advancer.
     DisposableEffect(ready, plan, activeLeg, locationGranted) {
+        // The "next run" button belongs to the leg it was shown for. After an auto-advance it
+        // would otherwise linger until the next fix, and a tap then would skip a whole run.
+        nearTerminus = false
         val (map, style) = ready ?: return@DisposableEffect onDispose {}
         val p = plan ?: return@DisposableEffect onDispose {}
         if (!locationGranted) return@DisposableEffect onDispose {}
