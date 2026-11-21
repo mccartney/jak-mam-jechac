@@ -80,9 +80,6 @@ data class Trip(
     val stops: List<StopTime>,
 ) {
     val stopIds: List<String> get() = stops.map { it.stopId }
-    /** A depot pull-out (TD-…) or pull-in (TZ-…). GTFS `exceptional` is no guide: it also flags
-     *  ordinary passenger runs on a non-standard variant (TX-…). */
-    val isDepotRun: Boolean get() = varCode.startsWith("TD") || varCode.startsWith("TZ")
     /** "HH:MM" leaving the first stop / reaching the last, or null if unscheduled. */
     val departure: String? get() = stops.firstOrNull()?.let { it.dep ?: it.arr }
     val arrival: String? get() = stops.lastOrNull()?.let { it.arr ?: it.dep }

@@ -5,6 +5,7 @@ package pl.waw.oledzki.jmj
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -30,59 +31,47 @@ class ClockDependentTest {
 
     @Test
     fun `before the shift today suggests the pull-out`() {
-        assertEquals(0, suggestedIndex(day, today, at("04:00")))
+        assertEquals(0, nowIndex(day, today, at("04:00")))
     }
 
     @Test
     fun `mid-trip today suggests the trip in progress`() {
-        assertEquals(1, suggestedIndex(day, today, at("06:15")))
+        assertEquals(1, nowIndex(day, today, at("06:15")))
     }
 
     @Test
     fun `between trips today suggests the next one`() {
-        assertEquals(2, suggestedIndex(day, today, at("06:35")))
+        assertEquals(2, nowIndex(day, today, at("06:35")))
     }
 
     @Test
     fun `a trip arriving this very minute still counts as current`() {
-        assertEquals(2, suggestedIndex(day, today, at("07:10")))
+        assertEquals(2, nowIndex(day, today, at("07:10")))
     }
 
     @Test
     fun `late evening today suggests the run past midnight`() {
-        assertEquals(3, suggestedIndex(day, today, at("23:00")))
+        assertEquals(3, nowIndex(day, today, at("23:00")))
     }
 
     @Test
     fun `just after midnight yesterday's duty suggests its run past midnight`() {
-        assertEquals(3, suggestedIndex(day, today.minusDays(1), at("00:15")))
+        assertEquals(3, nowIndex(day, today.minusDays(1), at("00:15")))
     }
 
     @Test
     fun `just after midnight yesterday's duty suggests its pull-in once the last run is done`() {
-        assertEquals(4, suggestedIndex(day, today.minusDays(1), at("00:45")))
+        assertEquals(4, nowIndex(day, today.minusDays(1), at("00:45")))
     }
 
     @Test
-    fun `yesterday's duty once it's over ignores the clock`() {
-        assertEquals(1, suggestedIndex(day, today.minusDays(1), at("09:00")))
+    fun `yesterday's duty once it's over has no leg running now`() {
+        assertNull(nowIndex(day, today.minusDays(1), at("09:00")))
     }
 
     @Test
-    fun `another date ignores the clock and suggests the first revenue run`() {
-        assertEquals(1, suggestedIndex(day, today.plusDays(1), at("23:00")))
-    }
-
-    @Test
-    fun `a non-standard variant run after the pull-out is a revenue run`() {
-        // 108/4 weekdays: TD-7PTK, then TX-STE (GTFS-exceptional, but carries passengers)
-        val withTx = listOf(day[0], trip("05:41", "06:15", "TX-STE")) + day.drop(1)
-        assertEquals(1, suggestedIndex(withTx, today.plusDays(1), at("23:00")))
-    }
-
-    @Test
-    fun `a day of only depot moves falls back to the first trip`() {
-        assertEquals(0, suggestedIndex(listOf(day[0], day[4]), today.plusDays(1), at("12:00")))
+    fun `another date has no leg running now`() {
+        assertNull(nowIndex(day, today.plusDays(1), at("06:15")))
     }
 
     // --- remembered selection ---

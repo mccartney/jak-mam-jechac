@@ -47,7 +47,6 @@ class PipelineContractTest {
         assertEquals(listOf("1", "2"), pts.keys.sorted())
         val chain = pts.getValue("1")
         assertEquals(listOf("TD-OUT", "TP-DWC", "TP-KAB", "TP-NIGHT", "TZ-IN"), chain.map { it.varCode })
-        assertEquals(listOf(true, false, false, false, true), chain.map { it.isDepotRun })
         assertEquals("Dw. Centralny", chain[1].head)
     }
 
