@@ -26,7 +26,8 @@ class DayPath private constructor(
     private val cum: DoubleArray,           // cumulative metres along the path at each vertex
     private val startArc: DoubleArray,      // arc at each trip's first vertex
     private val endArc: DoubleArray,        // arc at each trip's last vertex
-    val ref: LatLng,                        // projection origin; a leg's RouteFraming anchored here shares arcs
+    /** Projection origin. [RouteFraming] built on the same one measures a trip's arcs identically. */
+    val ref: LatLng,
 ) {
     val tripCount: Int get() = startArc.size
 
@@ -157,7 +158,7 @@ class TripCursor(
         // Picking the leg says *which* leg, not *where along it*: locate the bus across the
         // whole leg once (no window, no clock), then track it with the moving window. Also
         // how we recover if we lose the route for a while (see the off-route branch).
-        if (!initialized) return localize(lat, lon)
+        if (!initialized) return localize(lat, lon, bearing)
 
         // Travel bearing from real movement beats the GPS-reported one (which is noisy or
         // absent when crawling/parked); fall back to the reported bearing, else none. The
@@ -195,15 +196,16 @@ class TripCursor(
     }
 
     /**
-     * One-time (or post-detour) lock: search the whole committed leg, no window and no
-     * heading, to find where along it the bus is. Holds (off-route) until a match lands
-     * within [MAX_LATERAL]; once it does, the moving window takes over.
+     * One-time (or post-detour) lock: search the whole committed leg, no window, to find
+     * where along it the bus is. The GPS bearing, when there is one, picks the right pass of
+     * a road the leg drives out and back; without it (or if nothing agrees) any heading goes.
+     * Holds (off-route) until a match lands within [MAX_LATERAL]; then the window takes over.
      */
-    private fun localize(lat: Double, lon: Double): State {
-        val hit = day.project(
-            lat, lon, day.tripStart(committed), day.tripEnd(committed),
-            MAX_LATERAL, null, HEADING_TOL,
-        ) ?: return state(onRoute = false)
+    private fun localize(lat: Double, lon: Double, bearing: Double?): State {
+        val lo = day.tripStart(committed); val hi = day.tripEnd(committed)
+        val hit = bearing?.let { day.project(lat, lon, lo, hi, MAX_LATERAL, it, HEADING_TOL) }
+            ?: day.project(lat, lon, lo, hi, MAX_LATERAL, null, HEADING_TOL)
+            ?: return state(onRoute = false)
         arc = hit.arc
         anchorLat = lat; anchorLon = lon
         offStreak = 0

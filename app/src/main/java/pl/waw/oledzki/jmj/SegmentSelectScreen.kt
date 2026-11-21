@@ -55,7 +55,8 @@ fun SegmentSelectScreen(
         loading = true; failed = false
         try {
             val d = fetchLine(context, selection.line)
-            chain = d.resolveServiceId(selection.date)?.let { d.services[it]?.get(selection.brigade) }.orEmpty()
+            // null: the feed has no timetable on that date; empty: the brigade doesn't run then.
+            chain = d.resolveServiceId(selection.date)?.let { d.services[it]?.get(selection.brigade).orEmpty() }
             data = d
         } catch (e: Exception) {
             failed = true
@@ -68,6 +69,7 @@ fun SegmentSelectScreen(
     when {
         loading -> Centered(modifier) { CircularProgressIndicator() }
         failed -> Centered(modifier) { Text(stringResource(R.string.segment_error)) }
+        d != null && trips == null -> Centered(modifier) { Text(stringResource(R.string.segment_no_date)) }
         d == null || trips.isNullOrEmpty() -> Centered(modifier) { Text(stringResource(R.string.segment_empty)) }
         else -> SegmentList(selection, d, trips, modifier) { onConfirm(it, trips.size) }
     }
@@ -81,7 +83,7 @@ private fun SegmentList(
     modifier: Modifier,
     onConfirm: (Int) -> Unit,
 ) {
-    val suggested = remember(trips, selection.date) { suggestedIndex(trips, selection.date) }
+    val now = remember(trips, selection.date) { nowIndex(trips, selection.date) }
     fun stopName(id: String?): String = id?.let { data.stops[it]?.name } ?: "—"
 
     Column(
@@ -103,7 +105,7 @@ private fun SegmentList(
                     trip = trip,
                     origin = stopName(trip.stops.firstOrNull()?.stopId),
                     destination = stopName(trip.stops.lastOrNull()?.stopId),
-                    isNow = i == suggested,
+                    isNow = i == now,
                     onClick = { onConfirm(i) },
                 )
             }
@@ -119,10 +121,11 @@ private fun SegmentRow(
     isNow: Boolean,
     onClick: () -> Unit,
 ) {
+    // Depot moves only, by variant prefix. GTFS `exceptional` is no guide to "no passengers":
+    // it also flags ordinary passenger runs on a non-standard variant (TX-…).
     val tag = when {
         trip.varCode.startsWith("TD") -> stringResource(R.string.segment_pullout)
         trip.varCode.startsWith("TZ") -> stringResource(R.string.segment_pullin)
-        trip.exc == 1 -> stringResource(R.string.segment_nonrevenue)
         else -> null
     }
     Card(
@@ -161,18 +164,18 @@ private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
 }
 
 /**
- * The leg to pre-highlight. For today: the first leg not yet finished (arrival >= now),
- * i.e. the one in progress or the next up; else the last. Yesterday's duty counts too while
- * it's still running past midnight (GTFS times go beyond 24:00, so 00:15 is its 24:15).
- * Otherwise the current time says nothing, so just point at the first revenue run.
+ * The leg running "now" (highlighted and tagged "teraz"), or null when the current time says
+ * nothing about [date]. For today: the first leg not yet finished (arrival >= now), i.e. the
+ * one in progress or the next up; else the last. Yesterday's duty counts too while it's still
+ * running past midnight (GTFS times go beyond 24:00, so 00:15 is its 24:15).
  */
-internal fun suggestedIndex(trips: List<Trip>, date: LocalDate, now: LocalDateTime = LocalDateTime.now()): Int {
+internal fun nowIndex(trips: List<Trip>, date: LocalDate, now: LocalDateTime = LocalDateTime.now()): Int? {
     val today = now.toLocalDate()
     val nowMin = ChronoUnit.MINUTES.between(date.atStartOfDay(), now)
     val current = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= nowMin }
     return when {
         date == today -> if (current >= 0) current else trips.lastIndex
         date == today.minusDays(1) && current >= 0 -> current
-        else -> trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
+        else -> null
     }
 }

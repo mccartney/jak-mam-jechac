@@ -72,7 +72,7 @@
     "2026-11-20:PtS": {
       "1": [
         {
-          "var": "TX-OUT",
+          "var": "TD-OUT",
           "head": "Os. Kabaty",
           "dir": null,
           "exc": 1,
@@ -155,7 +155,7 @@
           ]
         },
         {
-          "var": "TX-IN",
+          "var": "TZ-IN",
           "head": "Zajezdnia",
           "dir": null,
           "exc": 1,

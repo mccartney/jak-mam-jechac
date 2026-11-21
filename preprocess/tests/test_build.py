@@ -57,7 +57,7 @@ class BuildTest(unittest.TestCase):
         cls.chain = cls.l504["services"]["2026-11-20:PtS"]["1"]
 
     def test_chain_is_ordered_by_first_departure_across_midnight(self):
-        self.assertEqual(["TX-OUT", "TP-DWC", "TP-KAB", "TP-NIGHT", "TX-IN"], [t["var"] for t in self.chain])
+        self.assertEqual(["TD-OUT", "TP-DWC", "TP-KAB", "TP-NIGHT", "TZ-IN"], [t["var"] for t in self.chain])
 
     def test_stops_are_ordered_by_numeric_stop_sequence(self):
         # sequences 1, 2, 9, 10 listed out of order in stop_times.txt

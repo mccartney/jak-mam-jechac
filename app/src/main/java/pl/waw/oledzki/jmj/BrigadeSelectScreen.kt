@@ -4,6 +4,7 @@
 package pl.waw.oledzki.jmj
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +75,12 @@ fun BrigadeSelectScreen(
     var line by rememberSaveable { mutableStateOf(saved?.line.orEmpty()) }
     var brigade by rememberSaveable { mutableStateOf(saved?.brigade.orEmpty()) }
     var query by rememberSaveable { mutableStateOf("") }
+    // "zmień" stashes the line/brigade it cleared, so Back can undo it until another line is picked.
+    var previous by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
+    BackHandler(enabled = previous != null) {
+        previous?.let { (l, b) -> line = l; brigade = b }
+        previous = null; query = ""
+    }
     var showPicker by remember { mutableStateOf(false) }
     var showAttributions by remember { mutableStateOf(false) }
 
@@ -87,12 +95,11 @@ fun BrigadeSelectScreen(
         }
     }
 
-    // Pull down past the top of the line list to re-download the index and wipe the form.
+    // Pull down past the top of the list to re-download the index; the form is left as it is.
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
     fun refresh() = scope.launch {
         refreshing = true
-        date = LocalDate.now(); line = ""; brigade = ""; query = ""
         failed = false
         try {
             index = fetchBrigades(context, force = true)
@@ -108,13 +115,11 @@ fun BrigadeSelectScreen(
     val filtered = remember(loaded, query) {
         val all = loaded ?: return@remember emptyList<LineInfo>()
         val q = query.trim()
-        (if (q.isEmpty()) all
-        else all.filter { it.line.startsWith(q, true) || it.name.contains(q, true) })
-            .sortedWith(lineOrder)
+        (if (q.isEmpty()) all else all.filter { it.matches(q) }).sortedWith(lineOrder)
     }
 
     // The whole screen is one scrollable list inside the pull-to-refresh box, so pulling
-    // down from the very top (over the date field) re-downloads the index and clears the form.
+    // down from the very top (over the date field) re-downloads the index.
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { refresh() },
@@ -149,7 +154,7 @@ fun BrigadeSelectScreen(
                         )
                     }
                     items(filtered, key = { it.line }) { info ->
-                        LineRow(info) { line = info.line; brigade = "" }
+                        LineRow(info) { line = info.line; brigade = ""; previous = null }
                     }
                 }
                 else -> brigadeItems(
@@ -157,7 +162,7 @@ fun BrigadeSelectScreen(
                     day = day,
                     brigade = brigade,
                     onBrigade = { brigade = it },
-                    onChangeLine = { line = ""; brigade = "" },
+                    onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
                 ) {
                     val selection = BrigadeSelection(line, brigade, date)
                     saveSelection(context, selection)   // remembered for the next 12h
@@ -181,6 +186,7 @@ fun BrigadeSelectScreen(
     if (showPicker) {
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = remember(index) { feedDates(index) },
         )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
@@ -199,6 +205,18 @@ fun BrigadeSelectScreen(
                 }
             },
         ) { DatePicker(state = pickerState) }
+    }
+}
+
+/** Only the dates the feed has a timetable for; any date until the index has loaded. */
+@OptIn(ExperimentalMaterial3Api::class)
+private fun feedDates(index: BrigadeIndex?): SelectableDates {
+    val days = index?.days?.takeIf { it.isNotEmpty() } ?: return object : SelectableDates {}
+    val years = days.keys.mapNotNullTo(HashSet()) { it.take(4).toIntOrNull() }
+    return object : SelectableDates {
+        override fun isSelectableDate(utcTimeMillis: Long) =
+            Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate().toString() in days
+        override fun isSelectableYear(year: Int) = year in years
     }
 }
 
@@ -306,6 +324,13 @@ private fun LazyListScope.brigadeItems(
 // alphanumeric ids (e.g. "M1", zero-padded depot brigades) after, alphabetically.
 internal val lineOrder =
     compareBy<LineInfo>({ it.line.toIntOrNull() == null }, { it.line.toIntOrNull() ?: 0 }, { it.line })
+// Line numbers match by prefix ignoring dashes and spaces, so "l3" or "l 3" finds "L-3";
+// names match by substring.
+private fun String.bare() = filterNot { it == '-' || it.isWhitespace() }
+internal fun LineInfo.matches(query: String): Boolean {
+    val bare = query.bare()
+    return (bare.isNotEmpty() && line.bare().startsWith(bare, true)) || name.contains(query, true)
+}
 internal val brigadeOrder =
     compareBy<String>({ it.toIntOrNull() == null }, { it.toIntOrNull() ?: 0 }, { it })
 

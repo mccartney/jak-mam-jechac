@@ -22,7 +22,7 @@ class LineDataTest {
         LineData("v", calendar, emptyMap(), stops, emptyMap())
 
     private fun trip(vararg ids: String, requestAt: Set<Int> = emptySet()) = Trip(
-        shape = null, head = "", varCode = "", exc = 0,
+        shape = null, head = "", varCode = "",
         stops = ids.mapIndexed { i, id -> StopTime(id, "06:0$i", "06:0$i", onRequest = i in requestAt) },
     )
 
@@ -115,14 +115,14 @@ class LineDataTest {
 
     @Test
     fun `departure and arrival fall back to whichever time a stop has`() {
-        val t = Trip(null, "", "", 0, listOf(StopTime("A", "06:00", null), StopTime("B", null, "06:30")))
+        val t = Trip(null, "", "", listOf(StopTime("A", "06:00", null), StopTime("B", null, "06:30")))
         assertEquals("06:00", t.departure)
         assertEquals("06:30", t.arrival)
     }
 
     @Test
     fun `a trip without stops has no times`() {
-        val t = Trip(null, "", "", 0, emptyList())
+        val t = Trip(null, "", "", emptyList())
         assertNull(t.departure)
         assertNull(t.arrival)
     }

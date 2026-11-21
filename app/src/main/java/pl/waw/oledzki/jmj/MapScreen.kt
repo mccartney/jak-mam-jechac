@@ -392,9 +392,10 @@ fun MapScreen(
                 // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
                 val framing = current.framing ?: return
                 nearTerminus = framing.distToEnd(location) <= TERMINUS_RADIUS
-                // The leg framing shares the day-path's projection, so the cursor's arc places us
-                // without a second full-path projection; only off-route (detour, not yet locked)
-                // fall back to projecting onto the leg.
+                // Frame from the cursor's place along the trip: it tracks the bus in order and by
+                // heading, so it knows which pass of a road driven out and back we're on, and it
+                // spares a second full-path projection. The nearest point of the whole trip can't
+                // tell the passes apart; it's only the off-route fallback.
                 val key = framing.segmentAt(
                     legArc ?: framing.arcOf(location.latitude, location.longitude),
                 ) ?: return
@@ -532,7 +533,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
         val stops = data.tripStopsGeoJson(trip)
         // A depot move may carry no shape; fromGeoJson throws on an empty path, so leave it undrawable.
         val framing = runCatching {
-            RouteFraming.fromGeoJson(route, stops, data.finalClusterStart(trip), dayPath?.ref)
+            RouteFraming.fromGeoJson(route, stops, data.finalClusterStart(trip), origin = dayPath?.ref)
         }.getOrNull()
         val tail = framing?.tailBeyondLastStop().orEmpty()
         Leg(
