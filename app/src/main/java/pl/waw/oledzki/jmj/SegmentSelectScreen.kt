@@ -55,7 +55,8 @@ fun SegmentSelectScreen(
         loading = true; failed = false
         try {
             val d = fetchLine(context, selection.line)
-            chain = d.resolveServiceId(selection.date)?.let { d.services[it]?.get(selection.brigade) }.orEmpty()
+            // null: the feed has no timetable on that date; empty: the brigade doesn't run then.
+            chain = d.resolveServiceId(selection.date)?.let { d.services[it]?.get(selection.brigade).orEmpty() }
             data = d
         } catch (e: Exception) {
             failed = true
@@ -68,6 +69,7 @@ fun SegmentSelectScreen(
     when {
         loading -> Centered(modifier) { CircularProgressIndicator() }
         failed -> Centered(modifier) { Text(stringResource(R.string.segment_error)) }
+        d != null && trips == null -> Centered(modifier) { Text(stringResource(R.string.segment_no_date)) }
         d == null || trips.isNullOrEmpty() -> Centered(modifier) { Text(stringResource(R.string.segment_empty)) }
         else -> SegmentList(selection, d, trips, modifier) { onConfirm(it, trips.size) }
     }
