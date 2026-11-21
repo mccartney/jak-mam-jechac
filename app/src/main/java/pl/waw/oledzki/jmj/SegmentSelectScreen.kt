@@ -122,7 +122,6 @@ private fun SegmentRow(
     val tag = when {
         trip.varCode.startsWith("TD") -> stringResource(R.string.segment_pullout)
         trip.varCode.startsWith("TZ") -> stringResource(R.string.segment_pullin)
-        trip.exc == 1 -> stringResource(R.string.segment_nonrevenue)
         else -> null
     }
     Card(
@@ -173,6 +172,6 @@ internal fun suggestedIndex(trips: List<Trip>, date: LocalDate, now: LocalDateTi
     return when {
         date == today -> if (current >= 0) current else trips.lastIndex
         date == today.minusDays(1) && current >= 0 -> current
-        else -> trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
+        else -> trips.indexOfFirst { !it.isDepotRun }.coerceAtLeast(0)
     }
 }

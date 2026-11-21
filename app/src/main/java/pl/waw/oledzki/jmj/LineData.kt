@@ -72,15 +72,17 @@ fun hhmmToMinutes(hhmm: String): Int {
  */
 data class StopTime(val stopId: String, val arr: String?, val dep: String?, val onRequest: Boolean = false)
 
-/** One trip in a brigade's day. [exc] = 1 marks a non-revenue depot pull-out/in. */
+/** One trip in a brigade's day. */
 data class Trip(
     val shape: String?,
     val head: String,
     val varCode: String,
-    val exc: Int,
     val stops: List<StopTime>,
 ) {
     val stopIds: List<String> get() = stops.map { it.stopId }
+    /** A depot pull-out (TD-…) or pull-in (TZ-…). GTFS `exceptional` is no guide: it also flags
+     *  ordinary passenger runs on a non-standard variant (TX-…). */
+    val isDepotRun: Boolean get() = varCode.startsWith("TD") || varCode.startsWith("TZ")
     /** "HH:MM" leaving the first stop / reaching the last, or null if unscheduled. */
     val departure: String? get() = stops.firstOrNull()?.let { it.dep ?: it.arr }
     val arrival: String? get() = stops.lastOrNull()?.let { it.arr ?: it.dep }
@@ -235,7 +237,6 @@ private fun parseTrip(t: JSONObject): Trip {
         shape = if (t.isNull("shape")) null else t.getString("shape"),
         head = t.optString("head"),
         varCode = t.optString("var"),
-        exc = t.optInt("exc"),
         stops = List(s.length()) { parseStopTime(s.getJSONObject(it)) },
     )
 }

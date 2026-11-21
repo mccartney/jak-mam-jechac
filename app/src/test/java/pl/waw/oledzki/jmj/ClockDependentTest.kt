@@ -16,16 +16,16 @@ class ClockDependentTest {
     private val today = LocalDate.of(2026, 11, 20)
     private fun at(hhmm: String) = LocalDateTime.of(today, LocalTime.parse(hhmm))
 
-    private fun trip(dep: String, arr: String, exc: Int = 0) =
-        Trip(null, "", "", exc, listOf(StopTime("A", dep, dep), StopTime("B", arr, arr)))
+    private fun trip(dep: String, arr: String, varCode: String = "TP-X") =
+        Trip(null, "", varCode, listOf(StopTime("A", dep, dep), StopTime("B", arr, arr)))
 
     // pull-out, two revenue runs, a run past midnight, pull-in
     private val day = listOf(
-        trip("05:40", "05:50", exc = 1),
+        trip("05:40", "05:50", "TD-X"),
         trip("06:00", "06:31"),
         trip("06:40", "07:10"),
         trip("24:10", "24:40"),
-        trip("24:50", "25:05", exc = 1),
+        trip("24:50", "25:05", "TZ-X"),
     )
 
     @Test
@@ -71,6 +71,13 @@ class ClockDependentTest {
     @Test
     fun `another date ignores the clock and suggests the first revenue run`() {
         assertEquals(1, suggestedIndex(day, today.plusDays(1), at("23:00")))
+    }
+
+    @Test
+    fun `a non-standard variant run after the pull-out is a revenue run`() {
+        // 108/4 weekdays: TD-7PTK, then TX-STE (GTFS-exceptional, but carries passengers)
+        val withTx = listOf(day[0], trip("05:41", "06:15", "TX-STE")) + day.drop(1)
+        assertEquals(1, suggestedIndex(withTx, today.plusDays(1), at("23:00")))
     }
 
     @Test

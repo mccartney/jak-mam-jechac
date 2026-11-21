@@ -15,7 +15,6 @@
     <string name="segment_empty">Brak kursów dla tej brygady</string>
     <string name="segment_pullout">wyjazd z zajezdni</string>
     <string name="segment_pullin">zjazd do zajezdni</string>
-    <string name="segment_nonrevenue">bez pasażerów</string>
     <string name="tab_sluzba">Służba</string>
     <string name="tab_kurs">Kurs</string>
     <string name="tab_mapa">Mapa</string>
