@@ -372,7 +372,7 @@ fun MapScreen(
                 val location = result.lastLocation ?: return
                 hasFix = true   // stop whole-route framing; GPS drives the camera from here
                 component.forceLocationUpdate(location)
-                var tripArc: Double? = null
+                var legArc: Double? = null   // where along this leg, if the cursor matched the fix
                 if (cursor != null) {
                     val st = cursor.update(
                         location.latitude, location.longitude,
@@ -385,22 +385,26 @@ fun MapScreen(
                         onLegChange(st.activeTrip)   // parent re-passes; the cursor re-seeds on the new leg
                         return
                     }
-                    if (st.onRoute) tripArc = st.tripArc
+                    legArc = st.tripArc
                 }
                 // Manual "next run" button shows once we're within reach of this leg's final
                 // stop — straight from the active leg's geometry, so it appears reliably at the
                 // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
-                nearTerminus = (current.framing?.distToEnd(location) ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
-                // Frame from the cursor's place along the trip: it tracks the bus in order and by
-                // heading, so it knows which pass of a road driven out and back we're on. The
-                // nearest point of the whole trip can't tell; it's only the off-route fallback.
                 val framing = current.framing ?: return
-                val sel = (tripArc?.let(framing::select) ?: framing.select(location)) ?: return
-                if (sel.key == lastSegment) return        // same segment → leave camera put
+                nearTerminus = framing.distToEnd(location) <= TERMINUS_RADIUS
+                // Frame from the cursor's place along the trip: it tracks the bus in order and by
+                // heading, so it knows which pass of a road driven out and back we're on, and it
+                // spares a second full-path projection. The nearest point of the whole trip can't
+                // tell the passes apart; it's only the off-route fallback.
+                val key = framing.segmentAt(
+                    legArc ?: framing.arcOf(location.latitude, location.longitude),
+                ) ?: return
+                if (key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
                 val width = mapView.width
+                val sel = framing.frameSegment(key)
                 if (height == 0 || width == 0 || sel.spanMeters <= 0.0) return
-                lastSegment = sel.key
+                lastSegment = key
                 map.animateCamera(
                     CameraUpdateFactory.newCameraPosition(
                         frameStops(map, sel, height / density, width / density),

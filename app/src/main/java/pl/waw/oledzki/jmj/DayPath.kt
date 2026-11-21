@@ -58,8 +58,7 @@ class DayPath private constructor(
         lat: Double, lon: Double, lo: Double, hi: Double,
         maxLateral: Double, heading: Double?, headingTol: Double,
     ): Hit? {
-        val px = (lon - ref.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude))
-        val py = (lat - ref.latitude) * M_PER_DEG_LAT
+        val (px, py) = xy(lat, lon, ref)
         var best = Double.MAX_VALUE
         var hit: Hit? = null
         for (i in 0 until path.size - 1) {
@@ -93,10 +92,7 @@ class DayPath private constructor(
             for ((t, trip) in trips.withIndex()) {
                 val first = path.size
                 for (ll in trip) {
-                    val p = doubleArrayOf(
-                        (ll.longitude - ref.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude)),
-                        (ll.latitude - ref.latitude) * M_PER_DEG_LAT,
-                    )
+                    val p = xy(ll.latitude, ll.longitude, ref)
                     if (path.isNotEmpty()) running += hypot(p[0] - path.last()[0], p[1] - path.last()[1])
                     path += p; cum += running
                 }
@@ -140,9 +136,10 @@ class TripCursor(
 ) {
     /**
      * What the map should show: the active trip, the next one while near the seam, on-route,
-     * and how far along the active trip the bus is (metres; meaningful while on-route).
+     * and [tripArc] — this fix's metres into the active trip, null when off route. Can exceed
+     * the trip's length while a seam crossing is still being debounced.
      */
-    data class State(val activeTrip: Int, val previewTrip: Int?, val onRoute: Boolean, val tripArc: Double)
+    data class State(val activeTrip: Int, val previewTrip: Int?, val onRoute: Boolean, val tripArc: Double?)
 
     private var arc = day.tripStart(startTrip)
     // The seeded trip is a floor: the driver picked it (or we advanced into it), so the cursor
@@ -220,7 +217,7 @@ class TripCursor(
         val preview = if (committed < day.tripCount - 1 &&
             day.tripEnd(committed) - arc <= PREVIEW_DIST
         ) committed + 1 else null
-        return State(committed, preview, onRoute, arc - day.tripStart(committed))
+        return State(committed, preview, onRoute, if (onRoute) arc - day.tripStart(committed) else null)
     }
 
     private companion object {

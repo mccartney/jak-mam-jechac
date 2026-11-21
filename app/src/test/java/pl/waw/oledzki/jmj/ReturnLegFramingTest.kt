@@ -62,8 +62,8 @@ class ReturnLegFramingTest {
         val northbound = TripCursor(day).update(52.205, 21.00003, bearing = 0.0)
         val southbound = TripCursor(day).update(52.205, 20.99997, bearing = 180.0)
         assertTrue(northbound.onRoute && southbound.onRoute)
-        assertEquals(legMeters / 2, northbound.tripArc, 5.0)
-        assertEquals(legMeters * 1.5, southbound.tripArc, 5.0)
+        assertEquals(legMeters / 2, northbound.tripArc!!, 5.0)
+        assertEquals(legMeters * 1.5, southbound.tripArc!!, 5.0)
     }
 
     @Test
@@ -72,10 +72,10 @@ class ReturnLegFramingTest {
         val track = leg(a, b, 20) + leg(b, a, 20).drop(1)
         val states = track.map { cursor.update(it[0], it[1]) }
         assertTrue(states.all { it.onRoute })
-        states.zipWithNext { x, y -> assertTrue(y.tripArc >= x.tripArc - 1, "cursor went backwards") }
+        states.zipWithNext { x, y -> assertTrue(y.tripArc!! >= x.tripArc!! - 1, "cursor went backwards") }
         // Back at the southbound stop's latitude, heading south: the return pass, not the outbound.
         val i = track.indices.last { abs(track[it][0] - backStop[0]) < 0.0003 }
-        assertEquals(legMeters + (b[0] - backStop[0]) * 111_320.0, states[i].tripArc, 30.0)
+        assertEquals(legMeters + (b[0] - backStop[0]) * 111_320.0, states[i].tripArc!!, 30.0)
     }
 
     @Test
@@ -92,7 +92,7 @@ class ReturnLegFramingTest {
         val cursor = TripCursor(dayPath, startTrip = 1)
         val p = leg(east, east2, 10)[3]
         val st = cursor.update(p[0], p[1])
-        assertEquals(trip1.arcOf(p[0], p[1]), st.tripArc, 0.01)
+        assertEquals(trip1.arcOf(p[0], p[1]), st.tripArc!!, 0.01)
     }
 
     // --- fixtures ------------------------------------------------------------------------------

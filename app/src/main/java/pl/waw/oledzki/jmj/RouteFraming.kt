@@ -15,11 +15,21 @@ import kotlin.math.sin
 private const val M_PER_DEG_LAT = 111_320.0
 
 /**
+ * Local equirectangular projection of (lat, lon) to [x, y] metres about [ref]. Shared with
+ * [DayPath] so a leg anchored at the day's origin gets bit-identical arcs.
+ */
+internal fun xy(lat: Double, lon: Double, ref: LatLng) = doubleArrayOf(
+    (lon - ref.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude)),
+    (lat - ref.latitude) * M_PER_DEG_LAT,
+)
+
+/**
  * A trip's path and its stops. Given a position, finds the stop just behind and
  * just ahead along the path and describes how to frame them.
  *
  * Geometry uses a local equirectangular projection (metres) anchored at the
- * path's first point — accurate enough across a single bus line's extent.
+ * path's first point, or at the [DayPath]'s origin when one is passed to [fromGeoJson] —
+ * accurate enough across a single bus line's extent.
  */
 class RouteFraming private constructor(
     private val path: List<DoubleArray>,   // [x, y] metres, projected from the shape
@@ -45,7 +55,8 @@ class RouteFraming private constructor(
         return hypot(p[0] - q[0], p[1] - q[1])
     }
 
-    fun select(location: Location): Selection? = select(location.latitude, location.longitude)
+    /** Metres along this leg's path to the point nearest (lat, lon) — a full-path projection. */
+    fun arcOf(lat: Double, lon: Double): Double = projectArc(path, cum, ref, lat, lon).first
 
     /**
      * Frames by the nearest point of the whole trip. A road driven out and back is the same
@@ -54,35 +65,41 @@ class RouteFraming private constructor(
      */
     fun select(lat: Double, lon: Double): Selection? = select(arcOf(lat, lon))
 
-    /** Metres along the trip's path of the nearest point to a position. */
-    internal fun arcOf(lat: Double, lon: Double): Double = projectArc(path, cum, ref, lat, lon).first
-
     /** Frames the bus at [arc] metres along the trip's path. */
-    fun select(arc: Double): Selection? {
+    fun select(arc: Double): Selection? = segmentAt(arc)?.let(::frameSegment)
+
+    /**
+     * Which segment a position [arc] metres along the path falls in — the [Selection.key]
+     * [frameSegment] would produce, without the cost of boxing the path. Null with < 2 stops.
+     *
+     * Final stage: once the next stop is the first of the terminus cluster (the trailing
+     * run of stops sharing the last stop's name), frame the whole remaining tail — the
+     * rest of the stops plus any shape beyond the last stop — as one steady window
+     * instead of the usual prev→next pair. While still approaching that first cluster stop
+     * we keep the preceding stop in view (e.g. Centrum + every Dw. Centralny); once it's
+     * behind us we drop it and frame only the cluster (first such stop → last). Two sentinel
+     * keys, both past every real stop index, so the camera re-frames once on entry and once
+     * when the preceding stop drops off, then holds still across the rest of the cluster.
+     */
+    fun segmentAt(arc: Double): Int? {
         if (stops.size < 2) return null
         var k = stopArc.indexOfFirst { it > arc }
         if (k < 0) k = stops.lastIndex     // past the last stop
         if (k == 0) k = 1                  // before the first stop
-        // Final stage: once the next stop is the first of the terminus cluster (the trailing
-        // run of stops sharing the last stop's name), frame the whole remaining tail — the
-        // rest of the stops plus any shape beyond the last stop — as one steady window
-        // instead of the usual prev→next pair. While still approaching that first cluster stop
-        // we keep the preceding stop in view (e.g. Centrum + every Dw. Centralny); once it's
-        // behind us we drop it and frame only the cluster (first such stop → last). Two sentinel
-        // keys, both past every real stop index, so the camera re-frames once on entry and once
-        // when the preceding stop drops off, then holds still across the rest of the cluster.
-        if (k >= finalStageStart) {
-            val approaching = k == finalStageStart
-            val startIdx = if (approaching) (finalStageStart - 1).coerceAtLeast(0) else finalStageStart
-            return frame(
-                stops[startIdx], stops.last(), stopArc[startIdx], cum.last(),
-                if (approaching) stops.size else stops.size + 1,
-            )
+        if (k >= finalStageStart) return if (k == finalStageStart) stops.size else stops.size + 1
+        return k
+    }
+
+    /** How to frame the segment [key] (from [segmentAt]): prev→next stop, or the final stage. */
+    fun frameSegment(key: Int): Selection {
+        if (key >= stops.size) {
+            val startIdx = if (key == stops.size) (finalStageStart - 1).coerceAtLeast(0) else finalStageStart
+            return frame(stops[startIdx], stops.last(), stopArc[startIdx], cum.last(), key)
         }
         return frame(
-            stops[k - 1], stops[k],
-            minOf(stopArc[k - 1], stopArc[k]), maxOf(stopArc[k - 1], stopArc[k]),
-            k,
+            stops[key - 1], stops[key],
+            minOf(stopArc[key - 1], stopArc[key]), maxOf(stopArc[key - 1], stopArc[key]),
+            key,
         )
     }
 
@@ -187,11 +204,6 @@ class RouteFraming private constructor(
             }
             return RouteFraming(path, cum, stops, orderedStopArcs(path, cum, ref, stops), ref, finalStageStart)
         }
-
-        private fun xy(lat: Double, lon: Double, ref: LatLng) = doubleArrayOf(
-            (lon - ref.longitude) * M_PER_DEG_LAT * cos(Math.toRadians(ref.latitude)),
-            (lat - ref.latitude) * M_PER_DEG_LAT,
-        )
 
         /**
          * Projects (lat,lon) onto the path: returns (arc, dist) where arc is the metres
