@@ -182,7 +182,7 @@ fun BrigadeSelectScreen(
     if (showPicker) {
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
-            selectableDates = feedDates(index),
+            selectableDates = remember(index) { feedDates(index) },
         )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
@@ -208,9 +208,11 @@ fun BrigadeSelectScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun feedDates(index: BrigadeIndex?): SelectableDates {
     val days = index?.days?.takeIf { it.isNotEmpty() } ?: return object : SelectableDates {}
+    val years = days.keys.mapNotNullTo(HashSet()) { it.take(4).toIntOrNull() }
     return object : SelectableDates {
         override fun isSelectableDate(utcTimeMillis: Long) =
             Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate().toString() in days
+        override fun isSelectableYear(year: Int) = year in years
     }
 }
 
