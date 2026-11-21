@@ -116,9 +116,7 @@ fun BrigadeSelectScreen(
     val filtered = remember(loaded, query) {
         val all = loaded ?: return@remember emptyList<LineInfo>()
         val q = query.trim()
-        (if (q.isEmpty()) all
-        else all.filter { it.line.startsWith(q, true) || it.name.contains(q, true) })
-            .sortedWith(lineOrder)
+        (if (q.isEmpty()) all else all.filter { it.matches(q) }).sortedWith(lineOrder)
     }
 
     // The whole screen is one scrollable list inside the pull-to-refresh box, so pulling
@@ -327,6 +325,13 @@ private fun LazyListScope.brigadeItems(
 // alphanumeric ids (e.g. "M1", zero-padded depot brigades) after, alphabetically.
 internal val lineOrder =
     compareBy<LineInfo>({ it.line.toIntOrNull() == null }, { it.line.toIntOrNull() ?: 0 }, { it.line })
+// Line numbers match by prefix ignoring dashes and spaces, so "l3" or "l 3" finds "L-3";
+// names match by substring.
+private fun String.bare() = filterNot { it == '-' || it.isWhitespace() }
+internal fun LineInfo.matches(query: String): Boolean {
+    val bare = query.bare()
+    return (bare.isNotEmpty() && line.bare().startsWith(bare, true)) || name.contains(query, true)
+}
 internal val brigadeOrder =
     compareBy<String>({ it.toIntOrNull() == null }, { it.toIntOrNull() ?: 0 }, { it })
 
