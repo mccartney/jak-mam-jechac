@@ -61,8 +61,10 @@ class MainActivity : ComponentActivity() {
                     // activeLeg auto-advances from the map at each terminus.
                     var activeLeg by rememberSaveable { mutableStateOf<Int?>(null) }
                     var legCount by rememberSaveable { mutableStateOf<Int?>(null) }
-                    // Back walks the flow leftwards (map → run → duty); only exits from the first tab.
-                    BackHandler(enabled = dest != Dest.SLUZBA) { dest = Dest.entries[dest.ordinal - 1] }
+                    // Back walks the flow leftwards (map → run → duty) and never leaves the app: a stray
+                    // Back mid-shift shouldn't drop the driver out (Home still does). Screens may claim
+                    // Back first for their own undo (e.g. "zmień" on the duty tab).
+                    BackHandler { if (dest != Dest.SLUZBA) dest = Dest.entries[dest.ordinal - 1] }
 
                     Column(Modifier.padding(padding)) {
                         UpdateBanner()

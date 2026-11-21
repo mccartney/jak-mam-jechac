@@ -4,6 +4,7 @@
 package pl.waw.oledzki.jmj
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +74,12 @@ fun BrigadeSelectScreen(
     var line by rememberSaveable { mutableStateOf(saved?.line.orEmpty()) }
     var brigade by rememberSaveable { mutableStateOf(saved?.brigade.orEmpty()) }
     var query by rememberSaveable { mutableStateOf("") }
+    // "zmień" stashes the line/brigade it cleared, so Back can undo it until another line is picked.
+    var previous by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
+    BackHandler(enabled = previous != null && line.isEmpty()) {
+        previous?.let { (l, b) -> line = l; brigade = b }
+        previous = null; query = ""
+    }
     var showPicker by remember { mutableStateOf(false) }
     var showAttributions by remember { mutableStateOf(false) }
 
@@ -92,7 +99,7 @@ fun BrigadeSelectScreen(
     var refreshing by remember { mutableStateOf(false) }
     fun refresh() = scope.launch {
         refreshing = true
-        date = LocalDate.now(); line = ""; brigade = ""; query = ""
+        date = LocalDate.now(); line = ""; brigade = ""; query = ""; previous = null
         failed = false
         try {
             index = fetchBrigades(context, force = true)
@@ -149,7 +156,7 @@ fun BrigadeSelectScreen(
                         )
                     }
                     items(filtered, key = { it.line }) { info ->
-                        LineRow(info) { line = info.line; brigade = "" }
+                        LineRow(info) { line = info.line; brigade = ""; previous = null }
                     }
                 }
                 else -> brigadeItems(
@@ -157,7 +164,7 @@ fun BrigadeSelectScreen(
                     day = day,
                     brigade = brigade,
                     onBrigade = { brigade = it },
-                    onChangeLine = { line = ""; brigade = "" },
+                    onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
                 ) {
                     val selection = BrigadeSelection(line, brigade, date)
                     saveSelection(context, selection)   // remembered for the next 12h
