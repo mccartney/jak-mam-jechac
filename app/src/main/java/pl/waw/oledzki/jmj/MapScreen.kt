@@ -390,7 +390,7 @@ fun MapScreen(
                 // Manual "next run" button shows once we're within reach of this leg's final
                 // stop — straight from the active leg's geometry, so it appears reliably at the
                 // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
-                nearTerminus = (current.framing?.locate(location)?.distToEnd ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
+                nearTerminus = (current.framing?.distToEnd(location) ?: Double.MAX_VALUE) <= TERMINUS_RADIUS
                 // Frame from the cursor's place along the trip: it tracks the bus in order and by
                 // heading, so it knows which pass of a road driven out and back we're on. The
                 // nearest point of the whole trip can't tell; it's only the off-route fallback.

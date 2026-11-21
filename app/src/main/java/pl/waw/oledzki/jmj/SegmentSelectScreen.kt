@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 
 /**
  * Second step: the chosen brigade runs several legs across the day (depot pull-out,
@@ -161,12 +162,17 @@ private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
 
 /**
  * The leg to pre-highlight. For today: the first leg not yet finished (arrival >= now),
- * i.e. the one in progress or the next up; else the last. For other dates the current
- * time says nothing, so just point at the first revenue run.
+ * i.e. the one in progress or the next up; else the last. Yesterday's duty counts too while
+ * it's still running past midnight (GTFS times go beyond 24:00, so 00:15 is its 24:15).
+ * Otherwise the current time says nothing, so just point at the first revenue run.
  */
 internal fun suggestedIndex(trips: List<Trip>, date: LocalDate, now: LocalDateTime = LocalDateTime.now()): Int {
-    if (date != now.toLocalDate()) return trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
-    val nowMin = now.hour * 60 + now.minute
-    val i = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= nowMin }
-    return if (i >= 0) i else trips.lastIndex
+    val today = now.toLocalDate()
+    val nowMin = ChronoUnit.MINUTES.between(date.atStartOfDay(), now)
+    val current = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= nowMin }
+    return when {
+        date == today -> if (current >= 0) current else trips.lastIndex
+        date == today.minusDays(1) && current >= 0 -> current
+        else -> trips.indexOfFirst { it.exc == 0 }.coerceAtLeast(0)
+    }
 }

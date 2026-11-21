@@ -54,6 +54,21 @@ class ClockDependentTest {
     }
 
     @Test
+    fun `just after midnight yesterday's duty suggests its run past midnight`() {
+        assertEquals(3, suggestedIndex(day, today.minusDays(1), at("00:15")))
+    }
+
+    @Test
+    fun `just after midnight yesterday's duty suggests its pull-in once the last run is done`() {
+        assertEquals(4, suggestedIndex(day, today.minusDays(1), at("00:45")))
+    }
+
+    @Test
+    fun `yesterday's duty once it's over ignores the clock`() {
+        assertEquals(1, suggestedIndex(day, today.minusDays(1), at("09:00")))
+    }
+
+    @Test
     fun `another date ignores the clock and suggests the first revenue run`() {
         assertEquals(1, suggestedIndex(day, today.plusDays(1), at("23:00")))
     }

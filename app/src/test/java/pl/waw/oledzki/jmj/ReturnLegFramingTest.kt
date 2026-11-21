@@ -92,7 +92,7 @@ class ReturnLegFramingTest {
         val cursor = TripCursor(dayPath, startTrip = 1)
         val p = leg(east, east2, 10)[3]
         val st = cursor.update(p[0], p[1])
-        assertEquals(trip1.locate(p[0], p[1]).arc, st.tripArc, 0.01)
+        assertEquals(trip1.arcOf(p[0], p[1]), st.tripArc, 0.01)
     }
 
     // --- fixtures ------------------------------------------------------------------------------
