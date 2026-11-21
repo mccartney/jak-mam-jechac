@@ -38,22 +38,11 @@ class RouteFraming private constructor(
         val key: Int,            // index of the next stop; identifies the current segment
     )
 
-    /** Where a position sits relative to this leg, used to detect arrival/handoff. */
-    data class Fix(
-        val distToPath: Double, // metres off the nearest point of the path
-        val arc: Double,        // metres travelled along the path to that point
-        val distToEnd: Double,  // straight-line metres to the final stop ("arrived" when small)
-    )
-
-    fun locate(location: Location): Fix = locate(location.latitude, location.longitude)
-
-    fun locate(lat: Double, lon: Double): Fix {
-        val (arc, dist) = projectArc(path, cum, ref, lat, lon)
-        val end = stops.lastOrNull()?.let {
-            val p = xy(lat, lon, ref); val q = xy(it.latitude, it.longitude, ref)
-            hypot(p[0] - q[0], p[1] - q[1])
-        } ?: 0.0
-        return Fix(dist, arc, end)
+    /** Straight-line metres from a position to the final stop ("arrived" when small). */
+    fun distToEnd(location: Location): Double {
+        val end = stops.lastOrNull() ?: return 0.0
+        val p = xy(location.latitude, location.longitude, ref); val q = xy(end.latitude, end.longitude, ref)
+        return hypot(p[0] - q[0], p[1] - q[1])
     }
 
     fun select(location: Location): Selection? = select(location.latitude, location.longitude)
