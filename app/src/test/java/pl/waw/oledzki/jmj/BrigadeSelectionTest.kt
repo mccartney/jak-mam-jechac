@@ -4,6 +4,8 @@
 package pl.waw.oledzki.jmj
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 
@@ -23,6 +25,15 @@ class BrigadeSelectionTest {
     fun `lines sort numerically first, then alphanumeric ones alphabetically`() {
         val lines = listOf("N01", "504", "10", "2", "E-1", "100").map { LineInfo(it, "", 3, emptyMap()) }
         assertEquals(listOf("2", "10", "100", "504", "E-1", "N01"), lines.sortedWith(lineOrder).map { it.line })
+    }
+
+    @Test
+    fun `line search ignores dashes and spaces in line numbers`() {
+        val l3 = LineInfo("L-3", "Dworzec - Centrum", 3, emptyMap())
+        listOf("l3", "L-3", "l 3", "L-", "centrum").forEach { assertTrue(l3.matches(it), it) }
+        listOf("l4", "3").forEach { assertFalse(l3.matches(it), it) }
+        assertTrue(l3.matches("-"))   // a lone dash still matches names containing one
+        assertFalse(LineInfo("504", "Wilanów", 3, emptyMap()).matches("-"))
     }
 
     @Test
