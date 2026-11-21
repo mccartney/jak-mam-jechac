@@ -1,0 +1,8 @@
+stop_id,stop_name,stop_lat,stop_lon
+D,Zajezdnia Kabaty,52.1270001,21.0700004
+K1,Os. Kabaty,52.1292261,21.0682534
+MID,Metro Wilanowska,52.1806,21.0244
+C1,Dw. Centralny,52.22822,21.00338
+C2,Dw. Centralny,52.22944,21.00372
+T1,Plac Narutowicza,52.21985,20.98361
+UNUSED,Nieużywany,52.0,21.0

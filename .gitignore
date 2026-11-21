@@ -11,3 +11,4 @@ build/
 *.apk
 *.aab
 *~
+__pycache__/

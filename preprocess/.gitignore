@@ -3,3 +3,4 @@ out/
 *.zip
 *.txt
 !requirements*.txt
+!tests/fixtures/**/*.txt

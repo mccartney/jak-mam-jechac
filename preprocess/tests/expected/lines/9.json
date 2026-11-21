@@ -1,0 +1,60 @@
+{
+  "line": "9",
+  "name": "Tramwaj testowy",
+  "type": 0,
+  "color": "B60000",
+  "textColor": "FFFFFF",
+  "calendar": {
+    "2026-11-23:PcS": [
+      "2026-11-23"
+    ]
+  },
+  "shapes": {
+    "S_T": [
+      [
+        20.98361,
+        52.21985
+      ],
+      [
+        21.00338,
+        52.22822
+      ]
+    ]
+  },
+  "stops": {
+    "C1": {
+      "n": "Dw. Centralny",
+      "lat": 52.22822,
+      "lon": 21.00338
+    },
+    "T1": {
+      "n": "Plac Narutowicza",
+      "lat": 52.21985,
+      "lon": 20.98361
+    }
+  },
+  "services": {
+    "2026-11-23:PcS": {
+      "1": [
+        {
+          "var": "TP-T",
+          "head": "Dw. Centralny",
+          "dir": 0,
+          "exc": 0,
+          "shape": "S_T",
+          "stops": [
+            {
+              "s": "T1",
+              "t": "10:00"
+            },
+            {
+              "s": "C1",
+              "t": "10:10"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "feedVersion": "2026-11-20"
+}
