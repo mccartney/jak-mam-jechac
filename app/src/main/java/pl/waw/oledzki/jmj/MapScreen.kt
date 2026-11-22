@@ -20,6 +20,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -371,26 +372,28 @@ fun MapScreen(
             AttributionBadge(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
                 showAttributions = true
             }
-            // Manual override at the terminus: jump to the next run if the auto-advance hasn't
-            // (or shouldn't) fire. Only near the terminus, and gone once tapped — no double-tap.
-            if (nearTerminus && activeLeg + 1 < (plan?.legs?.size ?: 0)) {
-                Button(
-                    onClick = { nearTerminus = false; onLegChange(activeLeg + 1) },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                ) {
-                    Text(stringResource(R.string.map_next_trip))
-                }
-            }
-            val frame = lastFrame
-            if (movedByUser && frame != null) {
-                FloatingActionButton(
-                    onClick = {
+            // Bottom-right, stacked: the top-right corner belongs to MapLibre's compass, which
+            // is visible whenever the map is rotated (i.e. almost always, with travel-up framing).
+            Column(
+                Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                val frame = lastFrame
+                if (movedByUser && frame != null) {
+                    FloatingActionButton(onClick = {
                         movedByUser = false
                         ready?.first?.animateCamera(CameraUpdateFactory.newCameraPosition(frame), CAMERA_ANIM_MS)
-                    },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
-                ) {
-                    Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_recenter))
+                    }) {
+                        Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_recenter))
+                    }
+                }
+                // Manual override at the terminus: jump to the next run if the auto-advance hasn't
+                // (or shouldn't) fire. Only near the terminus, and gone once tapped — no double-tap.
+                if (nearTerminus && activeLeg + 1 < (plan?.legs?.size ?: 0)) {
+                    Button(onClick = { nearTerminus = false; onLegChange(activeLeg + 1) }) {
+                        Text(stringResource(R.string.map_next_trip))
+                    }
                 }
             }
             if (showAttributions) {
