@@ -5,9 +5,14 @@ package pl.waw.oledzki.jmj
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.location.Location
+import android.location.LocationManager
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -16,9 +21,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,10 +43,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -282,6 +298,19 @@ fun MapScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    // The system-wide location switch, tracked live: the driver may flip it from the quick
+    // settings shade, which doesn't pause us, so a resume check alone would miss it.
+    var locationOn by remember { mutableStateOf(isLocationOn(context)) }
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) { locationOn = isLocationOn(context) }
+        }
+        ContextCompat.registerReceiver(
+            context, receiver, IntentFilter(LocationManager.MODE_CHANGED_ACTION),
+            ContextCompat.RECEIVER_NOT_EXPORTED,   // system broadcasts still arrive
+        )
+        onDispose { context.unregisterReceiver(receiver) }
+    }
 
     val mapView = rememberMapViewWithLifecycle()
 
@@ -304,36 +333,69 @@ fun MapScreen(
     // The manual "next run" button only appears as we near the current run's terminus (the
     // same proximity that previews the next trip), and hides as soon as it's used.
     var nearTerminus by remember { mutableStateOf(false) }
+    // The camera the GPS framing last chose. If the driver drags/zooms the map away from it,
+    // a "my location" button brings it back now instead of waiting for the next stop.
+    var lastFrame by remember { mutableStateOf<CameraPosition?>(null) }
+    var movedByUser by remember { mutableStateOf(false) }
 
-    Box(modifier) {
-        AndroidView(modifier = Modifier.fillMaxSize(), factory = {
-            mapView.apply {
-                getMapAsync { map ->
-                    setMaximumFps(MAP_MAX_FPS)   // renderer exists once the map is ready
-                    map.cameraPosition =
-                        CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
-                    map.setStyle(if (dark) DARK_STYLE else LIGHT_STYLE) { style ->
-                        HIDDEN_STYLE_LAYERS.forEach { style.removeLayer(it) }
-                        ready = map to style
+    Column(modifier) {
+        when {
+            !locationGranted -> LocationBanner(R.string.map_no_permission) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                )
+            }
+            !locationOn -> LocationBanner(R.string.map_location_off) {
+                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            AndroidView(modifier = Modifier.fillMaxSize(), factory = {
+                mapView.apply {
+                    getMapAsync { map ->
+                        setMaximumFps(MAP_MAX_FPS)   // renderer exists once the map is ready
+                        map.cameraPosition =
+                            CameraPosition.Builder().target(WARSAW).zoom(DRIVER_ZOOM).build()
+                        map.addOnCameraMoveStartedListener { reason ->
+                            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                                movedByUser = true
+                            }
+                        }
+                        map.setStyle(if (dark) DARK_STYLE else LIGHT_STYLE) { style ->
+                            HIDDEN_STYLE_LAYERS.forEach { style.removeLayer(it) }
+                            ready = map to style
+                        }
                     }
                 }
+            })
+            AttributionBadge(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                showAttributions = true
             }
-        })
-        AttributionBadge(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-            showAttributions = true
-        }
-        // Manual override at the terminus: jump to the next run if the auto-advance hasn't
-        // (or shouldn't) fire. Only near the terminus, and gone once tapped — no double-tap.
-        if (nearTerminus && activeLeg + 1 < (plan?.legs?.size ?: 0)) {
-            Button(
-                onClick = { nearTerminus = false; onLegChange(activeLeg + 1) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            ) {
-                Text(stringResource(R.string.map_next_trip))
+            // Manual override at the terminus: jump to the next run if the auto-advance hasn't
+            // (or shouldn't) fire. Only near the terminus, and gone once tapped — no double-tap.
+            if (nearTerminus && activeLeg + 1 < (plan?.legs?.size ?: 0)) {
+                Button(
+                    onClick = { nearTerminus = false; onLegChange(activeLeg + 1) },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                ) {
+                    Text(stringResource(R.string.map_next_trip))
+                }
             }
-        }
-        if (showAttributions) {
-            AttributionsDialog(feedVersion = plan?.feedVersion) { showAttributions = false }
+            val frame = lastFrame
+            if (movedByUser && frame != null) {
+                FloatingActionButton(
+                    onClick = {
+                        movedByUser = false
+                        ready?.first?.animateCamera(CameraUpdateFactory.newCameraPosition(frame), CAMERA_ANIM_MS)
+                    },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+                ) {
+                    Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_recenter))
+                }
+            }
+            if (showAttributions) {
+                AttributionsDialog(feedVersion = plan?.feedVersion) { showAttributions = false }
+            }
         }
     }
 
@@ -357,7 +419,9 @@ fun MapScreen(
     // Once the map is ready and permission is granted, start our own location updates:
     // move the puck, re-frame the camera, and auto-advance to the next leg at the terminus.
     // Re-keyed on activeLeg so each leg gets a fresh framing + advancer.
-    DisposableEffect(ready, plan, activeLeg, locationGranted) {
+    // Also re-keyed on locationOn: updates requested while location was off never resume by
+    // themselves once it's switched back on.
+    DisposableEffect(ready, plan, activeLeg, locationGranted, locationOn) {
         // The "next run" button belongs to the leg it was shown for. After an auto-advance it
         // would otherwise linger until the next fix, and a tap then would skip a whole run.
         nearTerminus = false
@@ -417,12 +481,10 @@ fun MapScreen(
                 val sel = framing.frameSegment(key)
                 if (height == 0 || width == 0 || sel.spanMeters <= 0.0) return
                 lastSegment = key
-                map.animateCamera(
-                    CameraUpdateFactory.newCameraPosition(
-                        frameStops(map, sel, height / density, width / density),
-                    ),
-                    CAMERA_ANIM_MS,
-                )
+                val frame = frameStops(map, sel, height / density, width / density)
+                lastFrame = frame
+                movedByUser = false   // the new stop's framing takes the camera back anyway
+                map.animateCamera(CameraUpdateFactory.newCameraPosition(frame), CAMERA_ANIM_MS)
             }
 
             override fun onFailure(exception: Exception) = Unit
@@ -448,6 +510,20 @@ fun MapScreen(
         } else {
             requestLocationUpdates(engine, callback)
             onDispose { engine.removeLocationUpdates(callback) }
+        }
+    }
+}
+
+private fun isLocationOn(context: Context) =
+    LocationManagerCompat.isLocationEnabled(context.getSystemService(LocationManager::class.java))
+
+/** A strip above the map saying why there's no position, with a shortcut to the fixing setting. */
+@Composable
+private fun LocationBanner(textRes: Int, onOpenSettings: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(textRes), Modifier.weight(1f).padding(vertical = 12.dp))
+            TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.map_open_settings)) }
         }
     }
 }

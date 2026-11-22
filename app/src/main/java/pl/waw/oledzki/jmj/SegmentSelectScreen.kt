@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -98,7 +103,7 @@ private fun SegmentList(
         )
         LazyColumn(
             Modifier.fillMaxWidth().weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             itemsIndexed(trips) { i, trip ->
                 SegmentRow(
@@ -135,12 +140,23 @@ private fun SegmentRow(
             else MaterialTheme.colorScheme.surfaceVariant,
         ),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            // Tag and "teraz" ride on the time row's right side rather than a line of their own.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     "${trip.departure ?: "--:--"} – ${trip.arrival ?: "--:--"}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (tag != null) Text(
+                    tag,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (isNow) Text(
                     stringResource(R.string.segment_now),
@@ -148,12 +164,19 @@ private fun SegmentRow(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            Text("$origin → $destination", style = MaterialTheme.typography.bodyLarge)
-            if (tag != null) Text(
-                tag,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Destination always on its own line, led by a drawn arrow: the "→" glyph sits at a
+            // different height in every OEM font. The icon fills the first line's box, so it stays
+            // level with that line even when a long name wraps.
+            val style = MaterialTheme.typography.bodyLarge
+            Text(origin, style = style)
+            Row {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(with(LocalDensity.current) { style.lineHeight.toDp() }).padding(3.dp),
+                )
+                Text(destination, style = style)
+            }
         }
     }
 }
