@@ -154,16 +154,22 @@ fun BrigadeSelectScreen(
                         LineRow(info) { line = info.line; brigade = ""; previous = null }
                     }
                 }
-                else -> brigadeItems(
-                    info = selected,
-                    day = day,
-                    brigade = brigade,
-                    onBrigade = { brigade = it },
-                    onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
-                ) {
-                    val selection = BrigadeSelection(line, brigade, date)
-                    saveSelection(context, selection)   // remembered for the next 12h
-                    onConfirm(selection)
+                else -> {
+                    fun confirm() {
+                        val selection = BrigadeSelection(line, brigade, date)
+                        saveSelection(context, selection)   // remembered for the next 12h
+                        onConfirm(selection)
+                    }
+                    brigadeItems(
+                        info = selected,
+                        day = day,
+                        brigade = brigade,
+                        // Tapping a brigade completes the duty, so it moves straight on to the run picker;
+                        // "Dalej" stays for confirming a prefilled one (or a changed date).
+                        onBrigade = { brigade = it; confirm() },
+                        onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
+                        onConfirm = ::confirm,
+                    )
                 }
             }
 
@@ -309,7 +315,7 @@ private fun LazyListScope.brigadeItems(
             onClick = onConfirm,
             enabled = brigade in brigades,
             modifier = Modifier.fillMaxWidth().height(80.dp),
-        ) { Text(stringResource(R.string.select_confirm)) }
+        ) { Text(stringResource(R.string.select_confirm), style = MaterialTheme.typography.headlineMedium) }
     }
 }
 
