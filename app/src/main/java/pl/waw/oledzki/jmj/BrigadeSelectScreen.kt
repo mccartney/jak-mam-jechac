@@ -8,24 +8,30 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
@@ -44,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -117,61 +124,68 @@ fun BrigadeSelectScreen(
 
     // The whole screen is one scrollable list inside the pull-to-refresh box, so pulling
     // down from the very top (over the date field) re-downloads the index.
-    PullToRefreshBox(
-        isRefreshing = refreshing,
-        onRefresh = { refresh() },
-        modifier = modifier.fillMaxSize(),
-    ) {
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+    Column(modifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = { refresh() },
+            modifier = Modifier.weight(1f),
         ) {
-            item("date") { DateField(date, day) { showPicker = true } }
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item("date") { DateField(date, day) { showPicker = true } }
 
-            when {
-                loaded == null && !failed -> item("loading") {
-                    Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                when {
+                    loaded == null && !failed -> item("loading") {
+                        Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                }
-                loaded == null -> item("error") {
-                    Text(stringResource(R.string.lines_error))
-                }
-                selected == null -> {
-                    item("search") {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            label = { Text(stringResource(R.string.select_line)) },
-                            placeholder = { Text("linia") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                    loaded == null -> item("error") {
+                        Text(stringResource(R.string.lines_error))
                     }
-                    items(filtered, key = { it.line }) { info ->
-                        LineRow(info) { line = info.line; brigade = ""; previous = null }
+                    selected == null -> {
+                        item("search") {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                label = { Text(stringResource(R.string.select_line)) },
+                                placeholder = { Text("linia") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        items(filtered, key = { it.line }) { info ->
+                            LineRow(info) { line = info.line; brigade = ""; previous = null }
+                        }
                     }
-                }
-                else -> brigadeItems(
-                    info = selected,
-                    day = day,
-                    brigade = brigade,
-                    onBrigade = { brigade = it },
-                    onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
-                ) {
-                    val selection = BrigadeSelection(line, brigade, date)
-                    saveSelection(context, selection)   // remembered for the next 12h
-                    onConfirm(selection)
+                    else -> brigadeItems(
+                        info = selected,
+                        day = day,
+                        brigade = brigade,
+                        onBrigade = { brigade = it },
+                        onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
+                    ) {
+                        val selection = BrigadeSelection(line, brigade, date)
+                        saveSelection(context, selection)   // remembered for the next 12h
+                        onConfirm(selection)
+                    }
                 }
             }
+        }
 
-            // Required data/map credits, reachable from the very first screen.
-            item("attributions") {
-                TextButton(onClick = { showAttributions = true }) {
-                    Text(stringResource(R.string.attributions_link))
-                }
-            }
+        // Required data/map credits, reachable from the very first screen: pinned under the
+        // list and muted, so they're always there but don't compete with the form.
+        TextButton(
+            onClick = { showAttributions = true },
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) {
+            Icon(painterResource(R.drawable.ic_info), contentDescription = null, Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.attributions_link), style = MaterialTheme.typography.labelMedium)
         }
     }
 
