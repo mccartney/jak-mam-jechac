@@ -122,10 +122,11 @@ fun BrigadeSelectScreen(
     val day = index?.dayType(date) ?: ServiceDay.of(date).code
     val loaded = index?.lines
     val selected = loaded?.firstOrNull { it.line == line }
+    // Each shown line with where the query hit it (null when there's no query).
     val filtered = remember(loaded, query) {
-        val all = loaded ?: return@remember emptyList<LineInfo>()
+        val all = loaded.orEmpty().sortedWith(lineOrder)
         val q = query.trim()
-        (if (q.isEmpty()) all else all.filter { it.matches(q) }).sortedWith(lineOrder)
+        if (q.isEmpty()) all.map { it to null } else all.mapNotNull { info -> info.match(q)?.let { info to it } }
     }
 
     // The whole screen is one scrollable list inside the pull-to-refresh box, so pulling
@@ -168,8 +169,8 @@ fun BrigadeSelectScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                        items(filtered, key = { it.line }) { info ->
-                            LineRow(info, query.trim()) { line = info.line; brigade = ""; previous = null }
+                        items(filtered, key = { it.first.line }) { (info, hit) ->
+                            LineRow(info, hit) { line = info.line; brigade = ""; previous = null }
                         }
                     }
                     else -> {
@@ -268,8 +269,7 @@ private fun DateField(date: LocalDate, day: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LineRow(info: LineInfo, query: String, onClick: () -> Unit) {
-    val hit = if (query.isEmpty()) null else info.match(query)
+private fun LineRow(info: LineInfo, hit: LineMatch?, onClick: () -> Unit) {
     // A faint tint behind the matched letters.
     val style = SpanStyle(background = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f))
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -382,7 +382,7 @@ internal fun LineInfo.matches(query: String) = match(query) != null
 /** [text] with [hit] (if any) given [style]. */
 private fun highlight(text: String, hit: IntRange?, style: SpanStyle) = buildAnnotatedString {
     append(text)
-    if (hit != null && !hit.isEmpty()) addStyle(style, hit.first, hit.last + 1)
+    if (hit != null) addStyle(style, hit.first, hit.last + 1)
 }
 internal val brigadeOrder =
     compareBy<String>({ it.toIntOrNull() == null }, { it.toIntOrNull() ?: 0 }, { it })
