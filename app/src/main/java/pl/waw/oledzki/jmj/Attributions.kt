@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.dp
  * One credit we must display. The transit credits mirror the feed's own attributions.txt —
  * ZTM Warszawa (the authority), Mikołaj Kuranowski (who builds the GTFS) and OpenStreetMap
  * (the bus shapes, under ODbL). The basemap credits are the ones OpenFreeMap requires
- * ("© OpenMapTiles · Data from OpenStreetMap"; OpenFreeMap itself is optional but included).
+ * ("© OpenMapTiles · Data from OpenStreetMap"; OpenFreeMap itself is optional but included), plus
+ * those of the dark-mode VersaTiles basemap: OSM (already listed) and the ESA WorldCover land cover
+ * (CC BY 4.0). Both basemaps are always listed rather than switching with the theme.
  * The City Hall / api.um.warszawa.pl credit is intentionally absent: it applies to the
  * realtime vehicle positions, which this app does not use. The schedule's feed version is
  * filled in live from the loaded data.
@@ -43,6 +45,8 @@ private val BASEMAP_CREDITS = listOf(
     Credit("© OpenMapTiles", "https://www.openmaptiles.org/"),
     Credit("Dane © OpenStreetMap (ODbL)", "https://www.openstreetmap.org/copyright"),
     Credit("OpenFreeMap", "https://openfreemap.org"),
+    Credit("VersaTiles", "https://versatiles.org"),
+    Credit("Pokrycie terenu: ESA WorldCover 2021 (CC BY 4.0)", "https://esa-worldcover.org"),
 )
 
 /** Small tappable "©" badge to overlay on the map; opens [AttributionsDialog]. */
