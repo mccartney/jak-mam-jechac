@@ -37,6 +37,23 @@ class BrigadeSelectionTest {
     }
 
     @Test
+    fun `line search ignores Polish letters both ways`() {
+        val bialoleka = LineInfo("120", "Białołęka - Żerań", 3, emptyMap())
+        listOf("bialo", "BIAŁO", "leka", "zeran", "Żerań").forEach { assertTrue(bialoleka.matches(it), it) }
+        assertTrue(LineInfo("504", "Wilanow", 3, emptyMap()).matches("wilanów"))
+    }
+
+    @Test
+    fun `match reports the hit ranges in the original text`() {
+        val l3 = LineInfo("L-3", "Dworzec - Centrum", 3, emptyMap())
+        assertEquals(LineMatch(0..2, null), l3.match("l3"))    // spans the dash
+        assertEquals(LineMatch(0..0, null), l3.match("l"))
+        assertEquals(LineMatch(null, 10..12), l3.match("cen"))
+        assertEquals(LineMatch(null, 0..4), LineInfo("120", "Białołęka", 3, emptyMap()).match("biało"))
+        assertEquals(null, l3.match("x"))
+    }
+
+    @Test
     fun `brigades sort numerically, zero-padded ones next to their value`() {
         assertEquals(
             listOf("01", "1", "2", "10", "A", "B1"),
