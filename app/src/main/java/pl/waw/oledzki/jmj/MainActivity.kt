@@ -22,8 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                         val sel = selection
                         val leg = activeLeg
                         val count = legCount
-                        TabRow(selectedTabIndex = dest.ordinal) {
+                        PrimaryTabRow(selectedTabIndex = dest.ordinal) {
                             Dest.entries.forEach { d ->
                                 // Once picked, a tab shows its value ("504/010", "3/7") instead of its
                                 // name; the icon says which is which, and the bare value fits narrow phones.
