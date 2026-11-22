@@ -19,10 +19,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,10 +37,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 /** The three always-visible destinations: duty → run → map. */
-private enum class Dest(val labelRes: Int) {
-    SLUZBA(R.string.tab_sluzba),
-    KURS(R.string.tab_kurs),
-    MAPA(R.string.tab_mapa),
+private enum class Dest(val labelRes: Int, val iconRes: Int) {
+    SLUZBA(R.string.tab_sluzba, R.drawable.ic_tab_badge),
+    KURS(R.string.tab_kurs, R.drawable.ic_tab_route),
+    MAPA(R.string.tab_mapa, R.drawable.ic_tab_navigation),
 }
 
 class MainActivity : ComponentActivity() {
@@ -68,17 +69,24 @@ class MainActivity : ComponentActivity() {
 
                     Column(Modifier.padding(padding)) {
                         UpdateBanner()
+                        val sel = selection
                         val leg = activeLeg
                         val count = legCount
-                        TabRow(selectedTabIndex = dest.ordinal) {
+                        PrimaryTabRow(selectedTabIndex = dest.ordinal) {
                             Dest.entries.forEach { d ->
-                                val label = if (d == Dest.KURS && leg != null && count != null)
-                                    "${stringResource(d.labelRes)} ${leg + 1}/$count"
-                                else stringResource(d.labelRes)
-                                Tab(
+                                // Once picked, a tab shows its value ("504/010", "3/7") instead of its
+                                // name; the icon says which is which, and the bare value fits narrow phones.
+                                val label = when {
+                                    d == Dest.SLUZBA && sel != null -> "${sel.line}/${sel.brigade}"
+                                    d == Dest.KURS && leg != null && count != null -> "${leg + 1}/$count"
+                                    else -> stringResource(d.labelRes)
+                                }
+                                // Icon inline with the label keeps the row 48dp tall (a stacked Tab is 72dp).
+                                LeadingIconTab(
                                     selected = dest == d,
                                     onClick = { dest = d },
                                     text = { Text(label) },
+                                    icon = { Icon(painterResource(d.iconRes), contentDescription = null) },
                                 )
                             }
                         }
@@ -88,18 +96,14 @@ class MainActivity : ComponentActivity() {
                                 Dest.SLUZBA -> BrigadeSelectScreen {
                                     selection = it; activeLeg = null; legCount = null; dest = Dest.KURS
                                 }
-                                Dest.KURS -> selection?.let { sel ->
+                                Dest.KURS -> if (sel != null)
                                     SegmentSelectScreen(sel) { index, total ->
                                         activeLeg = index; legCount = total; dest = Dest.MAPA
                                     }
-                                } ?: Hint(R.string.hint_pick_sluzba)
-                                Dest.MAPA -> {
-                                    val sel = selection
-                                    val cur = activeLeg
-                                    if (sel != null && cur != null)
-                                        MapScreen(sel, cur, onLegChange = { activeLeg = it })
-                                    else Hint(R.string.hint_pick_kurs)
-                                }
+                                else Hint(R.string.hint_pick_sluzba)
+                                Dest.MAPA -> if (sel != null && leg != null)
+                                    MapScreen(sel, leg, onLegChange = { activeLeg = it })
+                                else Hint(R.string.hint_pick_kurs)
                             }
                         }
                     }

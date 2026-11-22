@@ -161,16 +161,22 @@ fun BrigadeSelectScreen(
                             LineRow(info) { line = info.line; brigade = ""; previous = null }
                         }
                     }
-                    else -> brigadeItems(
-                        info = selected,
-                        day = day,
-                        brigade = brigade,
-                        onBrigade = { brigade = it },
-                        onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
-                    ) {
-                        val selection = BrigadeSelection(line, brigade, date)
-                        saveSelection(context, selection)   // remembered for the next 12h
-                        onConfirm(selection)
+                    else -> {
+                        fun confirm() {
+                            val selection = BrigadeSelection(line, brigade, date)
+                            saveSelection(context, selection)   // remembered for the next 12h
+                            onConfirm(selection)
+                        }
+                        brigadeItems(
+                            info = selected,
+                            day = day,
+                            brigade = brigade,
+                            // Tapping a brigade completes the duty, so it moves straight on to the run picker;
+                            // "Dalej" stays for confirming a prefilled one (or a changed date).
+                            onBrigade = { brigade = it; confirm() },
+                            onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
+                            onConfirm = ::confirm,
+                        )
                     }
                 }
             }
@@ -292,20 +298,27 @@ private fun LazyListScope.brigadeItems(
             }
         }
     }
-    item("brigades-label") {
-        Text(stringResource(R.string.select_brigade), style = MaterialTheme.typography.titleMedium)
-    }
     item("brigades") {
-        if (brigades.isEmpty()) {
-            Text(stringResource(R.string.no_brigades), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            FlowRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                brigades.forEach { b ->
-                    FilterChip(selected = b == brigade, onClick = { onBrigade(b) }, label = { Text(b) })
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.select_brigade), style = MaterialTheme.typography.titleMedium)
+            if (brigades.isEmpty()) {
+                Text(stringResource(R.string.no_brigades), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                // 48dp chips fill the touch target FilterChip reserves anyway, so rows don't
+                // carry invisible padding on top of the gap.
+                FlowRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    brigades.forEach { b ->
+                        FilterChip(
+                            selected = b == brigade,
+                            onClick = { onBrigade(b) },
+                            label = { Text(b, style = MaterialTheme.typography.titleMedium) },
+                            modifier = Modifier.height(48.dp),
+                        )
+                    }
                 }
             }
         }
@@ -315,7 +328,7 @@ private fun LazyListScope.brigadeItems(
             onClick = onConfirm,
             enabled = brigade in brigades,
             modifier = Modifier.fillMaxWidth().height(80.dp),
-        ) { Text(stringResource(R.string.select_confirm)) }
+        ) { Text(stringResource(R.string.select_confirm), style = MaterialTheme.typography.headlineMedium) }
     }
 }
 
