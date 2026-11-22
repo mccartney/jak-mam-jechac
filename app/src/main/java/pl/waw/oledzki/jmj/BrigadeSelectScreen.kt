@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -278,20 +279,27 @@ private fun LazyListScope.brigadeItems(
             }
         }
     }
-    item("brigades-label") {
-        Text(stringResource(R.string.select_brigade), style = MaterialTheme.typography.titleMedium)
-    }
     item("brigades") {
-        if (brigades.isEmpty()) {
-            Text(stringResource(R.string.no_brigades), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            FlowRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                brigades.forEach { b ->
-                    FilterChip(selected = b == brigade, onClick = { onBrigade(b) }, label = { Text(b) })
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.select_brigade), style = MaterialTheme.typography.titleMedium)
+            if (brigades.isEmpty()) {
+                Text(stringResource(R.string.no_brigades), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                // 48dp chips fill the touch target FilterChip reserves anyway, so rows don't
+                // carry invisible padding on top of the gap.
+                FlowRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    brigades.forEach { b ->
+                        FilterChip(
+                            selected = b == brigade,
+                            onClick = { onBrigade(b) },
+                            label = { Text(b, style = MaterialTheme.typography.titleMedium) },
+                            modifier = Modifier.height(48.dp),
+                        )
+                    }
                 }
             }
         }
