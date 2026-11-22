@@ -19,6 +19,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -83,8 +84,11 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.random.Random
 
-// OpenFreeMap's "Liberty" vector style — no API key, no usage limits.
-private const val OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
+// OpenFreeMap's "Liberty" vector style — no API key, no usage limits. In system dark mode (less glare
+// in a dark cab at night) VersaTiles' "colorful-dark", also keyless: OpenFreeMap's own dark styles
+// were too faint ("dark") or too sparse ("fiord") to read the streets at a glance.
+private const val LIGHT_STYLE = "https://tiles.openfreemap.org/styles/liberty"
+private const val DARK_STYLE = "https://tiles.versatiles.org/assets/styles/colorful-dark/style.json"
 private val WARSAW = LatLng(52.2297, 21.0122)
 
 // Style layers we strip after load to keep the driver's street view readable:
@@ -93,14 +97,17 @@ private val WARSAW = LatLng(52.2297, 21.0122)
 //    ground-level route line, so the red line can vanish "under" a building (again, Dw.
 //    Centralny). Dropping the extrusion leaves the flat `building` footprint — which sits
 //    below the route — for context.
-// removeLayer is a no-op if an id goes away in a future style version.
+// The list holds both styles' ids (Liberty's, then colorful-dark's tunnel rail — it has no 3D buildings);
+// removeLayer is a no-op for an id the loaded style doesn't have.
 private val HIDDEN_STYLE_LAYERS = listOf(
     "tunnel_major_rail",
     "tunnel_major_rail_hatching",
     "tunnel_transit_rail",
     "tunnel_transit_rail_hatching",
     "building-3d",
-)
+) + listOf("rail", "rail-service", "subway", "minorrail").flatMap {
+    listOf("tunnel-transport-$it", "tunnel-transport-$it:outline")
+}
 
 // How much to enlarge the location puck over its default size.
 private const val PUCK_SCALE = 1.3f
@@ -131,8 +138,10 @@ private const val PREVIEW_LAYER_ID = "route-preview-line"
 
 // Red for the run itself; green marks the terminus — the final stop and the bit of shape
 // past it where the next trip starts. The upcoming trip, previewed at the seam, is a muted
-// dashed grey, drawn beneath the red so the active run always reads on top.
+// dashed grey, drawn beneath the red so the active run always reads on top. The deep red
+// barely shows on the near-black dark basemap, so dark mode uses a lighter one.
 private const val ROUTE_RED = "#B60000"
+private const val ROUTE_RED_DARK = "#FF5252"
 private const val TERMINUS_GREEN = "#1B8A3A"
 private const val PREVIEW_GREY = "#9AA0A6"
 
@@ -248,6 +257,9 @@ fun MapScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    // Read once: a dark-mode switch recreates the activity (and so this map) with the new value.
+    val dark = isSystemInDarkTheme()
+    val routeRed = Color.parseColor(if (dark) ROUTE_RED_DARK else ROUTE_RED)
 
     // Drivers navigate by glancing at the map — keep the screen awake while it's shown.
     val view = LocalView.current
@@ -349,7 +361,7 @@ fun MapScreen(
                                 movedByUser = true
                             }
                         }
-                        map.setStyle(OPENFREEMAP_STYLE) { style ->
+                        map.setStyle(if (dark) DARK_STYLE else LIGHT_STYLE) { style ->
                             HIDDEN_STYLE_LAYERS.forEach { style.removeLayer(it) }
                             ready = map to style
                         }
@@ -391,7 +403,7 @@ fun MapScreen(
     LaunchedEffect(ready, leg) {
         val (map, style) = ready ?: return@LaunchedEffect
         val current = leg ?: return@LaunchedEffect
-        setRoute(style, current)
+        setRoute(style, current, routeRed)
         // No GPS yet → show the whole red line so the driver sees where the run goes. Once a
         // fix lands, the location callback below zooms into position and this stops applying.
         if (!hasFix && mapView.width > 0 && mapView.height > 0) {
@@ -640,16 +652,16 @@ private fun lineStringGeoJson(points: List<LatLng>): String {
 }
 
 /** Adds the route + tail + stop layers the first time, then just swaps their data on later legs. */
-private fun setRoute(style: Style, leg: Leg) {
+private fun setRoute(style: Style, leg: Leg, red: Int) {
     val route = leg.routeGeoJson ?: EMPTY_LINE
     val tail = leg.tailGeoJson ?: EMPTY_LINE
     val stops = leg.stopsGeoJson ?: EMPTY_FC
     val existing = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
     if (existing == null) {
         addRoutePreview(style, EMPTY_LINE)   // beneath the route line, so the active run reads on top
-        addRouteShape(style, route)
+        addRouteShape(style, route, red)
         addRouteTail(style, tail)   // above the route line, below the stops
-        addRouteStops(style, stops)
+        addRouteStops(style, stops, red)
     } else {
         existing.setGeoJson(route)
         style.getSourceAs<GeoJsonSource>(TAIL_SOURCE_ID)?.setGeoJson(tail)
@@ -682,11 +694,11 @@ private fun addRoutePreview(style: Style, geoJson: String) {
 }
 
 /** Draws the trip's shape as a line on the map. */
-private fun addRouteShape(style: Style, geoJson: String) {
+private fun addRouteShape(style: Style, geoJson: String, red: Int) {
     style.addSource(GeoJsonSource(ROUTE_SOURCE_ID, geoJson))
     style.addLayer(
         LineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID).withProperties(
-            PropertyFactory.lineColor(Color.parseColor(ROUTE_RED)),
+            PropertyFactory.lineColor(red),
             PropertyFactory.lineWidth(6f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -712,9 +724,9 @@ private fun addRouteTail(style: Style, geoJson: String) {
  * solid red dot, request stops (`role:request`) a hollow white one with a red ring, and the
  * final stop (`role:final`) is painted the terminus colour.
  */
-private fun addRouteStops(style: Style, geoJson: String) {
+private fun addRouteStops(style: Style, geoJson: String, routeRed: Int) {
     val role = Expression.get("role")
-    val red = Expression.color(Color.parseColor(ROUTE_RED))
+    val red = Expression.color(routeRed)
     val white = Expression.color(Color.WHITE)
     style.addSource(GeoJsonSource(STOPS_SOURCE_ID, geoJson))
     style.addLayer(

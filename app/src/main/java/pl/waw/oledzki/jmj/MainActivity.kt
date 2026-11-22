@@ -11,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,8 @@ import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,12 +50,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Edge-to-edge is mandatory from targetSdk 35; Scaffold pads for the bars and, in landscape, the
-        // camera cutout (safeDrawing; its default systemBars leaves the cutout uncovered). The UI is always
-        // light (no dark scheme), so pin dark bar icons rather than following the system theme.
-        val light = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
-        enableEdgeToEdge(statusBarStyle = light, navigationBarStyle = light)
+        // camera cutout (safeDrawing; its default systemBars leaves the cutout uncovered). The UI, map
+        // and bar icons all follow the system light/dark setting; there's no in-app toggle.
+        val bars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
                 Scaffold(Modifier.fillMaxSize(), contentWindowInsets = WindowInsets.safeDrawing) { padding ->
                     // Saveable, so a rotation or the system killing the app mid-route doesn't
                     // drop the driver back on the first tab with the duty and run forgotten.
