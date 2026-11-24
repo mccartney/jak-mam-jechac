@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -60,11 +61,16 @@ class MainActivity : ComponentActivity() {
                     // Saveable, so a rotation or the system killing the app mid-route doesn't
                     // drop the driver back on the first tab with the duty and run forgotten.
                     var dest by rememberSaveable { mutableStateOf(Dest.SLUZBA) }
-                    var selection by rememberSaveable { mutableStateOf<BrigadeSelection?>(null) }
+                    // A duty confirmed within the last 12h (a shift's worth) is still the duty on a fresh start.
+                    val context = LocalContext.current
+                    var selection by rememberSaveable { mutableStateOf(loadSelection(context)) }
                     // The active run and the chain size, shown on the Kurs tab as "N/M".
                     // activeLeg auto-advances from the map at each terminus.
                     var activeLeg by rememberSaveable { mutableStateOf<Int?>(null) }
                     var legCount by rememberSaveable { mutableStateOf<Int?>(null) }
+                    // While the duty is being re-picked ("zmień", another date), the tabs show their names
+                    // again. Back (undo) or leaving the duty tab brings the old duty and run back unchanged.
+                    var changing by rememberSaveable { mutableStateOf(false) }
                     // Back walks the flow leftwards (map → run → duty) and exits only from the first tab.
                     // Screens claim Back first for their own undo (e.g. "zmień" on the duty tab), so that
                     // is undone before Back can leave the app.
@@ -73,8 +79,8 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.padding(padding)) {
                         UpdateBanner()
                         WelcomeGate {
-                            val sel = selection
-                            val leg = activeLeg
+                            val sel = selection.takeUnless { changing }
+                            val leg = activeLeg.takeUnless { changing }
                             val count = legCount
                             PrimaryTabRow(selectedTabIndex = dest.ordinal) {
                                 Dest.entries.forEach { d ->
@@ -88,7 +94,8 @@ class MainActivity : ComponentActivity() {
                                     // Icon inline with the label keeps the row 48dp tall (a stacked Tab is 72dp).
                                     LeadingIconTab(
                                         selected = dest == d,
-                                        onClick = { dest = d },
+                                        // Leaving the duty tab abandons a re-pick (the form starts as the confirmed duty on return).
+                                        onClick = { if (d != dest) changing = false; dest = d },
                                         text = { Text(label) },
                                         icon = { Icon(painterResource(d.iconRes), contentDescription = null) },
                                     )
@@ -96,9 +103,10 @@ class MainActivity : ComponentActivity() {
                             }
                             Box(Modifier.fillMaxSize()) {
                                 when (dest) {
-                                    // Picking a duty resets the run and jumps to the run picker.
-                                    Dest.SLUZBA -> BrigadeSelectScreen {
-                                        selection = it; activeLeg = null; legCount = null; dest = Dest.KURS
+                                    // Picking a duty jumps to the run picker, resetting the run if the duty changed.
+                                    Dest.SLUZBA -> BrigadeSelectScreen(selection, onChanging = { changing = it }) {
+                                        if (it != selection) { activeLeg = null; legCount = null }
+                                        selection = it; changing = false; dest = Dest.KURS
                                     }
                                     Dest.KURS -> if (sel != null)
                                         SegmentSelectScreen(sel) { index, total ->
