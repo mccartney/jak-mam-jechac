@@ -38,4 +38,12 @@
     <string name="update_downloading">Pobieranie aktualizacji…</string>
     <string name="update_ready">Aktualizacja pobrana</string>
     <string name="update_restart">Uruchom ponownie</string>
+    <string name="welcome_intro">Aplikacja dla kierowców warszawskich autobusów. Pokazuje trasę linii z dokładną lokalizacją przystanków. Trasy i rozkłady są aktualizowane codziennie na podstawie danych ZTM, więc uwzględniają planowe zmiany tras i zmiany w rozkładzie brygad.</string>
+    <string name="welcome_how">Jak to działa</string>
+    <string name="welcome_step_sluzba">Wybierz datę, linię i brygadę.</string>
+    <string name="welcome_step_kurs">Wybierz kurs, od którego zaczynasz. Dzisiejszy bieżący kurs jest oznaczony „teraz”.</string>
+    <string name="welcome_step_mapa">Aplikacja prowadzi od przystanku do przystanku. Zawsze widać trasę między poprzednim i następnym przystankiem, a obraz nie przeskakuje, więc wystarczy zerknąć kątem oka. Na końcu kursu sama przechodzi do następnego.</string>
+    <string name="welcome_once">Włączasz raz, na początku pierwszego kółka albo przy wyjeździe z zajezdni, i dalej aplikacja prowadzi sama. Mapa potrzebuje dostępu do lokalizacji (GPS).</string>
+    <string name="welcome_about">Aplikacja jest darmowa i rozwijana hobbystycznie, a jej kod źródłowy jest na wolnej licencji. Uwagi i pomysły:</string>
+    <string name="welcome_start">Zaczynamy</string>
 </resources>
