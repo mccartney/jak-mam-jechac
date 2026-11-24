@@ -74,7 +74,8 @@ private fun Int.isDownloading() = this == InstallStatus.PENDING || this == Insta
 @Composable
 private fun Strip(textRes: Int, actionRes: Int? = null, onAction: () -> Unit = {}) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 16.dp).heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+        // 48dp = TextButton's minimum touch target, so strips with and without a button are the same height.
+        Row(Modifier.padding(start = 16.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(textRes), Modifier.weight(1f))
             if (actionRes != null) TextButton(onClick = onAction) { Text(stringResource(actionRes)) }
         }
