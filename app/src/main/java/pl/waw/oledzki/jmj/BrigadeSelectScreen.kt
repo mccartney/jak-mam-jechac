@@ -278,8 +278,8 @@ private fun LineRow(info: LineInfo, hit: LineMatch?, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(highlight(info.line, hit?.line, style), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(highlight(info.name, hit?.name, style), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(highlight(info.line, listOfNotNull(hit?.line), style), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(highlight(info.name, hit?.name.orEmpty(), style), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -359,12 +359,40 @@ private fun String.fold() = String(CharArray(length) { this[it].fold() })
 private fun Char.isGap() = this == '-' || isWhitespace()
 private fun String.bare() = filterNot { it.isGap() }
 
-/** Where a query hit: the matched part of the line number and/or of the name. */
-internal data class LineMatch(val line: IntRange?, val name: IntRange?)
+/** Where a query hit: the matched part of the line number and/or each matched part of the name. */
+internal data class LineMatch(val line: IntRange?, val name: List<IntRange>)
+
+// Abbreviations used in the names (folded), each with the full words it stands for, so
+// "plac" finds "Pl." and "dworzec" finds "Dw.".
+private val ABBREVIATIONS = mapOf(
+    "pl." to listOf("plac"),
+    "al." to listOf("aleja", "aleje", "alei"),
+    "dw." to listOf("dworzec"),
+    "os." to listOf("osiedle"),
+    "cm." to listOf("cmentarz"),
+    "pld." to listOf("poludnie", "poludniowy", "poludniowa"),
+    "pln." to listOf("polnoc", "polnocny", "polnocna"),
+    "gl." to listOf("glowny", "glowna"),
+    "zach." to listOf("zachod", "zachodni", "zachodnia"),
+)
+
+/** The first hit of query word [w] in the folded [name]: as a substring, or an abbreviation it spells out. */
+private fun wordHit(name: String, w: String): IntRange? {
+    name.indexOf(w).let { if (it >= 0) return it until it + w.length }
+    for ((abbr, words) in ABBREVIATIONS) {
+        if (words.none { it.startsWith(w) }) continue
+        var at = name.indexOf(abbr)
+        while (at > 0 && name[at - 1].isLetter()) at = name.indexOf(abbr, at + 1)   // whole words only
+        if (at >= 0) return at until at + abbr.length
+    }
+    return null
+}
 
 /**
- * Line numbers match by prefix ignoring dashes and spaces, so "l3" or "l 3" finds "L-3";
- * names match by substring. Null when neither matches.
+ * Line numbers match by prefix ignoring dashes and spaces, so "l3" or "l 3" finds "L-3".
+ * Names match when every word of the query is found in them, in any order ("pl trz" finds
+ * "Pl. Trzech Krzyży"), a word also finding an abbreviation it spells out ("plac" finds "Pl.").
+ * Null when neither matches.
  */
 internal fun LineInfo.match(query: String): LineMatch? {
     val q = query.fold()
@@ -373,16 +401,17 @@ internal fun LineInfo.match(query: String): LineMatch? {
         var n = 0   // the hit runs up to the original char that completes the bare prefix
         0..line.indexOfFirst { !it.isGap() && ++n == bare.length }
     } else null
-    val at = name.fold().indexOf(q)
-    val nameHit = if (at >= 0) at until at + q.length else null
-    return if (lineHit == null && nameHit == null) null else LineMatch(lineHit, nameHit)
+    val folded = name.fold()
+    val words = q.split(' ', '\t').filter { it.isNotEmpty() }
+    val nameHits = words.map { wordHit(folded, it) ?: return lineHit?.let { LineMatch(it, emptyList()) } }
+    return if (lineHit == null && nameHits.isEmpty()) null else LineMatch(lineHit, nameHits)
 }
 internal fun LineInfo.matches(query: String) = match(query) != null
 
-/** [text] with [hit] (if any) given [style]. */
-private fun highlight(text: String, hit: IntRange?, style: SpanStyle) = buildAnnotatedString {
+/** [text] with each of [hits] given [style]. */
+private fun highlight(text: String, hits: List<IntRange>, style: SpanStyle) = buildAnnotatedString {
     append(text)
-    if (hit != null) addStyle(style, hit.first, hit.last + 1)
+    hits.forEach { addStyle(style, it.first, it.last + 1) }
 }
 internal val brigadeOrder =
     compareBy<String>({ it.toIntOrNull() == null }, { it.toIntOrNull() ?: 0 }, { it })

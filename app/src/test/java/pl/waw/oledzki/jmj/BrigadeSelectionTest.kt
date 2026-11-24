@@ -46,11 +46,32 @@ class BrigadeSelectionTest {
     @Test
     fun `match reports the hit ranges in the original text`() {
         val l3 = LineInfo("L-3", "Dworzec - Centrum", 3, emptyMap())
-        assertEquals(LineMatch(0..2, null), l3.match("l3"))    // spans the dash
-        assertEquals(LineMatch(0..0, null), l3.match("l"))
-        assertEquals(LineMatch(null, 10..12), l3.match("cen"))
-        assertEquals(LineMatch(null, 0..4), LineInfo("120", "Białołęka", 3, emptyMap()).match("biało"))
+        assertEquals(LineMatch(0..2, emptyList()), l3.match("l3"))    // spans the dash
+        assertEquals(LineMatch(0..0, emptyList()), l3.match("l"))
+        assertEquals(LineMatch(null, listOf(10..12)), l3.match("cen"))
+        assertEquals(LineMatch(null, listOf(0..4)), LineInfo("120", "Białołęka", 3, emptyMap()).match("biało"))
         assertEquals(null, l3.match("x"))
+    }
+
+    @Test
+    fun `name search matches each word on its own, in any order`() {
+        val pl = LineInfo("108", "Pl. Trzech Krzyży – Stegny", 3, emptyMap())
+        listOf("pl trz", "trz pl", "Pl. Trzech", "trzech  krzyzy", "krzy steg").forEach { assertTrue(pl.matches(it), it) }
+        listOf("pl wil", "trzechk").forEach { assertFalse(pl.matches(it), it) }
+        assertEquals(LineMatch(null, listOf(0..1, 4..6)), pl.match("pl trz"))
+    }
+
+    @Test
+    fun `full words find the abbreviations in names`() {
+        val pl = LineInfo("108", "Pl. Trzech Krzyży – Stegny", 3, emptyMap())
+        listOf("plac", "plac trzech", "pla trz").forEach { assertTrue(pl.matches(it), it) }
+        assertEquals(LineMatch(null, listOf(0..2)), pl.match("plac"))
+        val dw = LineInfo("127", "Metro Młociny – Dw. Zachodni (Tunelowa)", 3, emptyMap())
+        listOf("dworzec zach", "dworzec", "metro dworz").forEach { assertTrue(dw.matches(it), it) }
+        assertFalse(dw.matches("osiedle"))
+        assertTrue(LineInfo("1", "Os. Górczewska", 3, emptyMap()).matches("osiedle gorcz"))
+        assertTrue(LineInfo("1", "Al. Jerozolimskie", 3, emptyMap()).matches("aleje jerozolimskie"))
+        assertFalse(LineInfo("1", "Kanał.", 3, emptyMap()).matches("aleja"))   // "ał." isn't a whole word
     }
 
     @Test
