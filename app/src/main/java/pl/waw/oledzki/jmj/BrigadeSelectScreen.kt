@@ -358,6 +358,7 @@ private fun Char.fold() = lowercaseChar().let { c -> PL.indexOf(c).let { if (it 
 private fun String.fold() = String(CharArray(length) { this[it].fold() })
 private fun Char.isGap() = this == '-' || isWhitespace()
 private fun String.bare() = filterNot { it.isGap() }
+private val SPACES = Regex("[\\s\\p{Z}]+")   // runs of isWhitespace() chars, incl. no-break space
 
 /** Where a query hit: the matched part of the line number and/or each matched part of the name. */
 internal data class LineMatch(val line: IntRange?, val name: List<IntRange>)
@@ -392,19 +393,30 @@ private fun wordHit(name: String, w: String): IntRange? {
  * Line numbers match by prefix ignoring dashes and spaces, so "l3" or "l 3" finds "L-3".
  * Names match when every word of the query is found in them, in any order ("pl trz" finds
  * "Pl. Trzech Krzyży"), a word also finding an abbreviation it spells out ("plac" finds "Pl.").
- * Null when neither matches.
+ * A word the name lacks may instead be the line number, so "108 stegny" finds 108 to Stegny.
+ * Null when nothing matches.
  */
 internal fun LineInfo.match(query: String): LineMatch? {
     val q = query.fold()
-    val bare = q.bare()
-    val lineHit = if (bare.isNotEmpty() && line.fold().bare().startsWith(bare)) {
-        var n = 0   // the hit runs up to the original char that completes the bare prefix
-        0..line.indexOfFirst { !it.isGap() && ++n == bare.length }
-    } else null
+    val lineHit = lineHit(q)
     val folded = name.fold()
-    val words = q.split(' ', '\t').filter { it.isNotEmpty() }
-    val nameHits = words.map { wordHit(folded, it) ?: return lineHit?.let { LineMatch(it, emptyList()) } }
-    return if (lineHit == null && nameHits.isEmpty()) null else LineMatch(lineHit, nameHits)
+    var wordLineHit: IntRange? = null
+    val nameHits = mutableListOf<IntRange>()
+    for (w in q.split(SPACES).filter { it.isNotEmpty() }) {
+        val hit = wordHit(folded, w)
+        if (hit != null) nameHits += hit
+        else wordLineHit = lineHit(w) ?: return lineHit?.let { LineMatch(it, emptyList()) }
+    }
+    val line = lineHit ?: wordLineHit
+    return if (line == null && nameHits.isEmpty()) null else LineMatch(line, nameHits)
+}
+
+/** The part of the line number that folded query [q] is a prefix of, ignoring gaps; null if it isn't one. */
+private fun LineInfo.lineHit(q: String): IntRange? {
+    val bare = q.bare()
+    if (bare.isEmpty() || !line.fold().bare().startsWith(bare)) return null
+    var n = 0   // the hit runs up to the original char that completes the bare prefix
+    return 0..line.indexOfFirst { !it.isGap() && ++n == bare.length }
 }
 internal fun LineInfo.matches(query: String) = match(query) != null
 
