@@ -74,16 +74,20 @@ import java.time.ZoneOffset
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrigadeSelectScreen(
+    current: BrigadeSelection?,
     modifier: Modifier = Modifier,
+    onChanging: (Boolean) -> Unit,
     onConfirm: (BrigadeSelection) -> Unit,
 ) {
     val context = LocalContext.current
-    // Prefill from the last selection, but only while it's fresh (a shift's worth, 12h);
-    // anything older has expired and the form starts blank.
-    val saved = remember { loadSelection(context) }
-    var date by rememberSaveable { mutableStateOf(saved?.date ?: LocalDate.now()) }
-    var line by rememberSaveable { mutableStateOf(saved?.line.orEmpty()) }
-    var brigade by rememberSaveable { mutableStateOf(saved?.brigade.orEmpty()) }
+    // The form starts as the confirmed duty, so it always matches the tabs.
+    var date by rememberSaveable { mutableStateOf(current?.date ?: LocalDate.now()) }
+    var line by rememberSaveable { mutableStateOf(current?.line.orEmpty()) }
+    var brigade by rememberSaveable { mutableStateOf(current?.brigade.orEmpty()) }
+    // Any edit away from the confirmed duty ("zmień", another date) is a re-pick until it's
+    // confirmed, undone, or the tab is left; the tabs show their names meanwhile.
+    val draft = BrigadeSelection(line, brigade, date)
+    LaunchedEffect(draft, current) { onChanging(current != null && draft != current) }
     var query by rememberSaveable { mutableStateOf("") }
     // "zmień" stashes the line/brigade it cleared, so Back can undo it until another line is picked.
     var previous by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
@@ -184,7 +188,7 @@ fun BrigadeSelectScreen(
                             day = day,
                             brigade = brigade,
                             // Tapping a brigade completes the duty, so it moves straight on to the run picker;
-                            // "Dalej" stays for confirming a prefilled one (or a changed date).
+                            // "Dalej" stays for confirming a changed date (or the same duty again, keeping the run).
                             onBrigade = { brigade = it; confirm() },
                             onChangeLine = { previous = line to brigade; line = ""; brigade = "" },
                             onConfirm = ::confirm,
@@ -446,7 +450,7 @@ private fun saveSelection(context: Context, selection: BrigadeSelection) {
 }
 
 /** The persisted selection, or null if there is none or it's older than [REMEMBER_MS]. */
-private fun loadSelection(context: Context): BrigadeSelection? {
+internal fun loadSelection(context: Context): BrigadeSelection? {
     val prefs = context.getSharedPreferences(SELECTION_PREFS, Context.MODE_PRIVATE)
     val savedAt = prefs.getLong(KEY_SAVED_AT, 0L)
     if (!isRemembered(savedAt, System.currentTimeMillis())) return null
