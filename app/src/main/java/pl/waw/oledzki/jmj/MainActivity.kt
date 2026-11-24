@@ -72,41 +72,43 @@ class MainActivity : ComponentActivity() {
 
                     Column(Modifier.padding(padding)) {
                         UpdateBanner()
-                        val sel = selection
-                        val leg = activeLeg
-                        val count = legCount
-                        PrimaryTabRow(selectedTabIndex = dest.ordinal) {
-                            Dest.entries.forEach { d ->
-                                // Once picked, a tab shows its value ("504/010", "3/7") instead of its
-                                // name; the icon says which is which, and the bare value fits narrow phones.
-                                val label = when {
-                                    d == Dest.SLUZBA && sel != null -> "${sel.line}/${sel.brigade}"
-                                    d == Dest.KURS && leg != null && count != null -> "${leg + 1}/$count"
-                                    else -> stringResource(d.labelRes)
-                                }
-                                // Icon inline with the label keeps the row 48dp tall (a stacked Tab is 72dp).
-                                LeadingIconTab(
-                                    selected = dest == d,
-                                    onClick = { dest = d },
-                                    text = { Text(label) },
-                                    icon = { Icon(painterResource(d.iconRes), contentDescription = null) },
-                                )
-                            }
-                        }
-                        Box(Modifier.fillMaxSize()) {
-                            when (dest) {
-                                // Picking a duty resets the run and jumps to the run picker.
-                                Dest.SLUZBA -> BrigadeSelectScreen {
-                                    selection = it; activeLeg = null; legCount = null; dest = Dest.KURS
-                                }
-                                Dest.KURS -> if (sel != null)
-                                    SegmentSelectScreen(sel) { index, total ->
-                                        activeLeg = index; legCount = total; dest = Dest.MAPA
+                        WelcomeGate {
+                            val sel = selection
+                            val leg = activeLeg
+                            val count = legCount
+                            PrimaryTabRow(selectedTabIndex = dest.ordinal) {
+                                Dest.entries.forEach { d ->
+                                    // Once picked, a tab shows its value ("504/010", "3/7") instead of its
+                                    // name; the icon says which is which, and the bare value fits narrow phones.
+                                    val label = when {
+                                        d == Dest.SLUZBA && sel != null -> "${sel.line}/${sel.brigade}"
+                                        d == Dest.KURS && leg != null && count != null -> "${leg + 1}/$count"
+                                        else -> stringResource(d.labelRes)
                                     }
-                                else Hint(R.string.hint_pick_sluzba)
-                                Dest.MAPA -> if (sel != null && leg != null)
-                                    MapScreen(sel, leg, onLegChange = { activeLeg = it })
-                                else Hint(R.string.hint_pick_kurs)
+                                    // Icon inline with the label keeps the row 48dp tall (a stacked Tab is 72dp).
+                                    LeadingIconTab(
+                                        selected = dest == d,
+                                        onClick = { dest = d },
+                                        text = { Text(label) },
+                                        icon = { Icon(painterResource(d.iconRes), contentDescription = null) },
+                                    )
+                                }
+                            }
+                            Box(Modifier.fillMaxSize()) {
+                                when (dest) {
+                                    // Picking a duty resets the run and jumps to the run picker.
+                                    Dest.SLUZBA -> BrigadeSelectScreen {
+                                        selection = it; activeLeg = null; legCount = null; dest = Dest.KURS
+                                    }
+                                    Dest.KURS -> if (sel != null)
+                                        SegmentSelectScreen(sel) { index, total ->
+                                            activeLeg = index; legCount = total; dest = Dest.MAPA
+                                        }
+                                    else Hint(R.string.hint_pick_sluzba)
+                                    Dest.MAPA -> if (sel != null && leg != null)
+                                        MapScreen(sel, leg, onLegChange = { activeLeg = it })
+                                    else Hint(R.string.hint_pick_kurs)
+                                }
                             }
                         }
                     }
