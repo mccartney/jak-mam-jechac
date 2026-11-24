@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -163,8 +164,9 @@ fun BrigadeSelectScreen(
                                 value = query,
                                 onValueChange = { query = it },
                                 label = { Text(stringResource(R.string.select_line)) },
-                                placeholder = { Text("linia") },
+                                placeholder = { Text(stringResource(R.string.line_search_hint)) },
                                 singleLine = true,
+                                leadingIcon = { Icon(Icons.Default.Search, null) },
                                 trailingIcon = {
                                     if (query.isNotEmpty()) IconButton(onClick = { query = "" }) {
                                         Icon(Icons.Default.Clear, stringResource(R.string.clear_search))
