@@ -81,7 +81,6 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
-import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.random.Random
 
@@ -148,7 +147,7 @@ private const val PREVIEW_GREY = "#9AA0A6"
 
 // DEBUG: on-device GPS-spoofing apps won't reach our fused LocationEngine (see the
 // gps-spoofing memory), so we can feed a looping fake track instead of the real engine —
-// cycling through the leg's fake points, one per 7 s. Hidden developer toggle, no UI; the
+// cycling through the leg's fake track, one fix per second. Hidden developer toggle, no UI; the
 // value is the epoch-seconds the fake track stays on *until*, so it self-disarms. Enable for
 // an hour with
 //   adb shell settings put global jmj_fake_loc $(date -d '+1 hour' +%s)   (…0 = off now).
@@ -169,8 +168,9 @@ private val FAKE_POINTS_BY_LINE = mapOf(
         doubleArrayOf(52.232530, 21.037441),
     ),
 )
-private const val FAKE_JITTER_M = 100.0   // ± random offset added to each generated point
-private const val M_PER_DEG_LAT = 111_320.0
+private const val FAKE_HOLD_S = 7          // seconds each hand-placed spot is held
+private const val FAKE_SPEED_MPS = 8.0     // generated track: ~30 km/h between stops…
+private const val FAKE_DWELL_S = 10        // …and this long standing at each stop
 
 /**
  * The hidden developer fake-GPS flag. Settings.Global keeps no timestamp of its own, so the
@@ -187,45 +187,59 @@ private fun fakeLocationEnabled(context: Context): Boolean {
  * (see [FAKE_POINTS_BY_LINE]), otherwise generated from the trip's geometry.
  */
 private fun fakeTrackFor(line: String, data: LineData, trip: Trip): List<DoubleArray> =
-    FAKE_POINTS_BY_LINE[line] ?: generateFakeTrack(data, trip)
+    FAKE_POINTS_BY_LINE[line]?.flatMap { p -> List(FAKE_HOLD_S) { p } } ?: generateFakeTrack(data, trip)
 
 /**
- * A default fake track: pick three random consecutive stops, sample five points evenly along
- * the trip's shape between them, and jitter each by ±[FAKE_JITTER_M]. Falls back to the first
- * stop alone when there isn't enough geometry.
+ * A default fake track, one point per second: pick three random consecutive stops and drive
+ * along the trip's shape from the first to the third at [FAKE_SPEED_MPS], standing
+ * [FAKE_DWELL_S] at each of them. Falls back to the first stop alone when there isn't enough
+ * geometry.
  */
 private fun generateFakeTrack(data: LineData, trip: Trip): List<DoubleArray> {
     val shape = data.shapes[trip.shape].orEmpty()
     val stops = trip.stopIds.mapNotNull { data.stops[it] }
     if (stops.size < 3 || shape.size < 2) {
         val s = stops.firstOrNull() ?: return emptyList()
-        return listOf(jitter(s.lat, s.lon))
+        return listOf(doubleArrayOf(s.lat, s.lon))
     }
-    val i = Random.nextInt(stops.size - 2)             // window start: stops i, i+1, i+2
-    val from = nearestVertex(shape, stops[i])
-    val to = nearestVertex(shape, stops[i + 2])
-    val lo = minOf(from, to); val hi = maxOf(from, to)
-    return (0..4).map { k ->
-        val idx = lo + (hi - lo) * k / 4               // k=0 → lo, k=4 → hi
-        jitter(shape[idx].latitude, shape[idx].longitude)
+    val i = Random.nextInt(stops.size - 2)             // window: stops i, i+1, i+2
+    // Each stop's vertex searched from the previous one on, so a loop can't send us backwards.
+    val at = (0..2).runningFold(0) { from, k -> nearestVertex(shape, stops[i + k], from) }.drop(1)
+    val track = ArrayList<DoubleArray>()
+    fun dwell(v: Int) = repeat(FAKE_DWELL_S) { track += doubleArrayOf(shape[v].latitude, shape[v].longitude) }
+    dwell(at[0])
+    for (k in 0..1) {
+        track += walk(shape.subList(at[k], at[k + 1] + 1), FAKE_SPEED_MPS)
+        dwell(at[k + 1])
     }
+    return track
 }
 
-/** Index of the shape vertex closest to [stop] (degree-space is fine over a single trip). */
-private fun nearestVertex(shape: List<LatLng>, stop: Stop): Int {
-    var best = Double.MAX_VALUE; var bi = 0
-    for (j in shape.indices) {
+/** Index of the shape vertex closest to [stop], searching from [from] on (degree-space is fine over a single trip). */
+private fun nearestVertex(shape: List<LatLng>, stop: Stop, from: Int = 0): Int {
+    var best = Double.MAX_VALUE; var bi = from
+    for (j in from until shape.size) {
         val d = hypot(shape[j].latitude - stop.lat, shape[j].longitude - stop.lon)
         if (d < best) { best = d; bi = j }
     }
     return bi
 }
 
-/** A point offset by up to ±[FAKE_JITTER_M] in each direction. */
-private fun jitter(lat: Double, lon: Double): DoubleArray {
-    val dLat = (Random.nextDouble() * 2 - 1) * FAKE_JITTER_M / M_PER_DEG_LAT
-    val dLon = (Random.nextDouble() * 2 - 1) * FAKE_JITTER_M / (M_PER_DEG_LAT * cos(Math.toRadians(lat)))
-    return doubleArrayOf(lat + dLat, lon + dLon)
+/** Points every [step] metres along a polyline, from its start up to (not including) its end. */
+private fun walk(pts: List<LatLng>, step: Double): List<DoubleArray> {
+    val out = ArrayList<DoubleArray>()
+    var d = 0.0                                        // metres into the current segment
+    for (j in 0 until pts.size - 1) {
+        val a = pts[j]; val b = pts[j + 1]
+        val len = xy(b.latitude, b.longitude, a).let { hypot(it[0], it[1]) }
+        while (d < len) {
+            val t = d / len
+            out += doubleArrayOf(a.latitude + (b.latitude - a.latitude) * t, a.longitude + (b.longitude - a.longitude) * t)
+            d += step
+        }
+        d -= len
+    }
+    return out
 }
 
 // Empty geometry for a leg with no drawable shape (e.g. a depot move) — keeps source ids stable.
@@ -242,6 +256,7 @@ private class Leg(
     val tailGeoJson: String?,   // shape past the final stop, drawn green (null/empty if none)
     val framing: RouteFraming?,
     val fakeTrack: List<DoubleArray>,   // DEBUG: looped when fake GPS is on
+    val stops: List<LegStop>,           // aligned with the framing's stops (the ones with a name)
 )
 
 /**
@@ -338,6 +353,8 @@ fun MapScreen(
     // a "my location" button brings it back now instead of waiting for the next stop.
     var lastFrame by remember { mutableStateOf<CameraPosition?>(null) }
     var movedByUser by remember { mutableStateOf(false) }
+    // The stop ahead and the ± against the timetable, for the strip above the map.
+    var nextStop by remember { mutableStateOf<NextStop?>(null) }
 
     Column(modifier) {
         when {
@@ -350,6 +367,7 @@ fun MapScreen(
                 context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
             }
         }
+        nextStop?.let { NextStopBar(it) }
         Box(Modifier.weight(1f)) {
             AndroidView(modifier = Modifier.fillMaxSize(), factory = {
                 mapView.apply {
@@ -428,6 +446,9 @@ fun MapScreen(
         // The "next run" button belongs to the leg it was shown for. After an auto-advance it
         // would otherwise linger until the next fix, and a tap then would skip a whole run.
         nearTerminus = false
+        // The strip stays across a leg change (the next fix updates it, and clearing it would make
+        // the map jump in height at every terminus), but goes once no fix can refresh it.
+        if (!locationGranted || !locationOn) nextStop = null
         val (map, style) = ready ?: return@DisposableEffect onDispose {}
         val p = plan ?: return@DisposableEffect onDispose {}
         if (!locationGranted) return@DisposableEffect onDispose {}
@@ -469,15 +490,18 @@ fun MapScreen(
                 // Manual "next run" button shows once we're within reach of this leg's final
                 // stop — straight from the active leg's geometry, so it appears reliably at the
                 // terminus even when the day-cursor is momentarily unsure (e.g. a detour).
-                val framing = current.framing ?: return
+                val framing = current.framing ?: run { nextStop = null; return }
                 nearTerminus = framing.distToEnd(location) <= TERMINUS_RADIUS
                 // Frame from the cursor's place along the trip: it tracks the bus in order and by
                 // heading, so it knows which pass of a road driven out and back we're on, and it
                 // spares a second full-path projection. The nearest point of the whole trip can't
                 // tell the passes apart; it's only the off-route fallback.
-                val key = framing.segmentAt(
-                    legArc ?: framing.arcOf(location.latitude, location.longitude),
-                ) ?: return
+                val arc = legArc ?: framing.arcOf(location.latitude, location.longitude)
+                nextStop = framing.stopAhead(arc)?.let(current.stops::getOrNull)?.let { stop ->
+                    val due = stop.minute?.let { selection.date.atStartOfDay().plusMinutes(it.toLong()) }
+                    NextStop(stop.name, stop.post, stop.onRequest, due)
+                }
+                val key = framing.segmentAt(arc) ?: return
                 if (key == lastSegment) return        // same segment → leave camera put
                 val height = mapView.height
                 val width = mapView.width
@@ -493,19 +517,20 @@ fun MapScreen(
             override fun onFailure(exception: Exception) = Unit
         }
         if (fakeLocationEnabled(context) && current.fakeTrack.isNotEmpty()) {
-            // Tick a synthetic fix every 7 s, cycling through this leg's fake track, into the
+            // Tick a synthetic fix every second, cycling through this leg's fake track, into the
             // same callback the real engine would use — so the puck, framing and leg-advance all run.
             val track = current.fakeTrack
             val handler = Handler(Looper.getMainLooper())
             val tick = object : Runnable {
                 override fun run() {
                     val now = System.currentTimeMillis()
-                    val p = track[((now / 7000) % track.size).toInt()]
-                    val loc = Location("fake").apply {
-                        latitude = p[0]; longitude = p[1]; time = now
-                    }
+                    val n = ((now / 1000) % track.size).toInt()
+                    fun fix(p: DoubleArray) = Location("fake").apply { latitude = p[0]; longitude = p[1]; time = now }
+                    val loc = fix(track[n])
+                    // Heading like a real fix: only while moving, and not across the loop's jump back.
+                    if (n > 0) fix(track[n - 1]).takeIf { it.distanceTo(loc) > 0.5f }?.let { loc.bearing = it.bearingTo(loc) }
                     callback.onSuccess(LocationEngineResult.create(loc))
-                    handler.postDelayed(this, 7000L)
+                    handler.postDelayed(this, 1000L - now % 1000)
                 }
             }
             handler.post(tick)
@@ -633,6 +658,10 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
             tailGeoJson = if (tail.size >= 2) lineStringGeoJson(tail) else null,
             framing = framing,
             fakeTrack = fakeTrackFor(selection.line, data, trip),
+            // Same filter as tripStopsGeoJson, so indices match the framing's stops.
+            stops = trip.stops.mapNotNull { st ->
+                data.stops[st.stopId]?.let { LegStop(it.name, postNumber(st.stopId), (st.dep ?: st.arr)?.let(::hhmmToMinutes), st.onRequest) }
+            },
         )
     }
     return RoutePlan(legs, dayPath, data.feedVersion)
