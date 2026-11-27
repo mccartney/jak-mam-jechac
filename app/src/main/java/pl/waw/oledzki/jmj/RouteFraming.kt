@@ -90,6 +90,15 @@ class RouteFraming private constructor(
         return k
     }
 
+    /**
+     * Index of the stop ahead of a position [arc] metres along the path: the first stop before
+     * the trip starts, the last once past it. Null with no stops.
+     */
+    fun stopAhead(arc: Double): Int? {
+        if (stops.isEmpty()) return null
+        return stopArc.indexOfFirst { it > arc }.takeIf { it >= 0 } ?: stops.lastIndex
+    }
+
     /** How to frame the segment [key] (from [segmentAt]): prev→next stop, or the final stage. */
     fun frameSegment(key: Int): Selection {
         if (key >= stops.size) {
