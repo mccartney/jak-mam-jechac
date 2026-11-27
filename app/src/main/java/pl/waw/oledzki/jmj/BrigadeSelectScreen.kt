@@ -163,7 +163,6 @@ fun BrigadeSelectScreen(
                             OutlinedTextField(
                                 value = query,
                                 onValueChange = { query = it },
-                                label = { Text(stringResource(R.string.select_line)) },
                                 placeholder = { Text(stringResource(R.string.line_search_hint)) },
                                 singleLine = true,
                                 leadingIcon = { Icon(Icons.Default.Search, null) },
