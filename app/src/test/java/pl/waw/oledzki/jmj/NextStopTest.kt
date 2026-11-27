@@ -53,6 +53,12 @@ class NextStopTest {
     }
 
     @Test
+    fun `post number is the stop id's last two digits, depots have none`() {
+        assertEquals("09", postNumber("200809"))
+        assertNull(postNumber("R-0700"))
+    }
+
+    @Test
     fun `formats with sign and seconds`() {
         assertEquals("+1:05", formatDeviation(65))
         assertEquals("−2:30", formatDeviation(-150))

@@ -499,7 +499,7 @@ fun MapScreen(
                 val arc = legArc ?: framing.arcOf(location.latitude, location.longitude)
                 nextStop = framing.stopAhead(arc)?.let(current.stops::getOrNull)?.let { stop ->
                     val due = stop.minute?.let { selection.date.atStartOfDay().plusMinutes(it.toLong()) }
-                    NextStop(stop.name, stop.onRequest, due)
+                    NextStop(stop.name, stop.post, stop.onRequest, due)
                 }
                 val key = framing.segmentAt(arc) ?: return
                 if (key == lastSegment) return        // same segment → leave camera put
@@ -660,7 +660,7 @@ private suspend fun loadRoute(context: Context, selection: BrigadeSelection): Ro
             fakeTrack = fakeTrackFor(selection.line, data, trip),
             // Same filter as tripStopsGeoJson, so indices match the framing's stops.
             stops = trip.stops.mapNotNull { st ->
-                data.stops[st.stopId]?.let { LegStop(it.name, (st.dep ?: st.arr)?.let(::hhmmToMinutes), st.onRequest) }
+                data.stops[st.stopId]?.let { LegStop(it.name, postNumber(st.stopId), (st.dep ?: st.arr)?.let(::hhmmToMinutes), st.onRequest) }
             },
         )
     }

@@ -30,10 +30,14 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 
 /** A leg's stop as the next-stop strip needs it; [minute] is from the service day's midnight. */
-class LegStop(val name: String, val minute: Int?, val onRequest: Boolean)
+class LegStop(val name: String, val post: String?, val minute: Int?, val onRequest: Boolean)
+
+/** The post number ("02" of Saska 02): the last two digits of a ZTM stop id; depots have none. */
+internal fun postNumber(stopId: String): String? =
+    stopId.takeLast(2).takeIf { stopId.length == 6 && stopId.all(Char::isDigit) }
 
 /** What the strip above the map shows: the stop ahead and when it's due (null if untimed). */
-data class NextStop(val name: String, val onRequest: Boolean, val due: LocalDateTime?)
+data class NextStop(val name: String, val post: String?, val onRequest: Boolean, val due: LocalDateTime?)
 
 // Beyond this the "deviation" means the driver is looking at another day's duty, not running late.
 private const val MAX_DEVIATION_SEC = 60 * 60L
@@ -70,13 +74,17 @@ fun NextStopBar(next: NextStop) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                next.name,
-                Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // A long name gets the "…", never the post number after it.
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    next.name,
+                    Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                next.post?.let { Text(it, style = MaterialTheme.typography.titleLarge, maxLines = 1) }
+            }
             if (next.onRequest) {
                 Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.small) {
                     Text(
