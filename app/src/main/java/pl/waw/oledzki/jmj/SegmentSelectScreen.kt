@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,6 +36,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
@@ -88,7 +93,14 @@ private fun SegmentList(
     modifier: Modifier,
     onConfirm: (Int) -> Unit,
 ) {
-    val now = remember(trips, selection.date) { nowIndex(trips, selection.date) }
+    // Re-read the clock on every return to the app and each minute while it's shown: the screen
+    // may sit backgrounded for hours, and a sleeping phone's delay() timer doesn't tick.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val now by produceState(nowIndex(trips, selection.date), trips, selection.date, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) { value = nowIndex(trips, selection.date); delay(60_000) }
+        }
+    }
     fun stopName(id: String?): String = id?.let { data.stops[it]?.name } ?: "—"
 
     Column(
@@ -188,17 +200,13 @@ private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
 
 /**
  * The leg running "now" (highlighted and tagged "teraz"), or null when the current time says
- * nothing about [date]. For today: the first leg not yet finished (arrival >= now), i.e. the
- * one in progress or the next up; else the last. Yesterday's duty counts too while it's still
- * running past midnight (GTFS times go beyond 24:00, so 00:15 is its 24:15).
+ * nothing about [date]: the first leg not yet finished (arrival >= now), i.e. the one in
+ * progress or the next up, of today's duty or of yesterday's while it's still running past
+ * midnight (GTFS times go beyond 24:00, so 00:15 is its 24:15). Null once the duty is over.
  */
 internal fun nowIndex(trips: List<Trip>, date: LocalDate, now: LocalDateTime = LocalDateTime.now()): Int? {
     val today = now.toLocalDate()
+    if (date != today && date != today.minusDays(1)) return null
     val nowMin = ChronoUnit.MINUTES.between(date.atStartOfDay(), now)
-    val current = trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= nowMin }
-    return when {
-        date == today -> if (current >= 0) current else trips.lastIndex
-        date == today.minusDays(1) && current >= 0 -> current
-        else -> null
-    }
+    return trips.indexOfFirst { (it.arrival?.let(::hhmmToMinutes) ?: Int.MAX_VALUE) >= nowMin }.takeIf { it >= 0 }
 }

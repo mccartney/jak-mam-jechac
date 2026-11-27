@@ -55,6 +55,12 @@ class ClockDependentTest {
     }
 
     @Test
+    fun `today's duty once it's over has no leg running now`() {
+        val morning = listOf(trip("05:40", "05:50", "TD-X"), trip("06:00", "08:31"), trip("08:40", "09:05", "TZ-X"))
+        assertNull(nowIndex(morning, today, at("19:00")))
+    }
+
+    @Test
     fun `just after midnight yesterday's duty suggests its run past midnight`() {
         assertEquals(3, nowIndex(day, today.minusDays(1), at("00:15")))
     }
