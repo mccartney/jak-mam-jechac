@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -309,10 +308,10 @@ private fun LazyListScope.brigadeItems(
             ) {
                 Text(info.line, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(info.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = stringResource(R.string.change_line),
-                    tint = MaterialTheme.colorScheme.primary,
+                Text(
+                    stringResource(R.string.change_line),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
