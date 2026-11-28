@@ -105,7 +105,7 @@ suspend fun fetchLine(context: Context, line: String): LineData = withContext(Di
         System.currentTimeMillis() - cache.lastModified() < DATA_TTL_MS &&
         cache.lastModified() >= index.lastModified()
     if (!fresh) try {
-        cache.writeAtomically(download("$DATA_BASE_URL/lines/$line.json"))
+        cache.refreshFrom("$DATA_BASE_URL/lines/$line.json")
     } catch (e: Exception) {
         if (!cache.exists()) throw e   // otherwise fall back to the copy we have
     }
@@ -121,14 +121,12 @@ suspend fun fetchLine(context: Context, line: String): LineData = withContext(Di
 suspend fun fetchBrigades(context: Context, force: Boolean = false): BrigadeIndex = withContext(Dispatchers.IO) {
     val cache = context.cacheDir.resolve("brigades.json")
     val fresh = !force && cache.exists() && System.currentTimeMillis() - cache.lastModified() < DATA_TTL_MS
-    val bytes = if (fresh) {
-        cache.readBytes()
-    } else try {
-        download("$DATA_BASE_URL/brigades.json").also { cache.writeAtomically(it) }
+    if (!fresh) try {
+        cache.refreshFrom("$DATA_BASE_URL/brigades.json")
     } catch (e: Exception) {
-        if (cache.exists()) cache.readBytes() else throw e
+        if (!cache.exists()) throw e   // otherwise fall back to the copy we have
     }
-    parseBrigades(bytes.decodeToString())
+    parseBrigades(cache.readText())
 }
 
 internal fun parseBrigades(json: String): BrigadeIndex {
@@ -172,7 +170,16 @@ private fun File.writeAtomically(bytes: ByteArray) {
     }
 }
 
-internal fun download(url: String): ByteArray {
+/**
+ * Brings this cache file up to date with [url] by a conditional GET against the S3 ETag kept
+ * beside it (`<name>.etag`): an unchanged object costs a bodiless 304, on which the file is just
+ * re-stamped as fresh, instead of a multi-MB re-download (e.g. the lines re-checked after a
+ * pull-to-refresh of the index, within the same day's build).
+ */
+private fun File.refreshFrom(url: String) {
+    val etagFile = resolveSibling("$name.etag")
+    // A pinned (read-only) side-load isn't what the ETag describes, so never revalidate it.
+    val etag = etagFile.takeIf { canWrite() && it.exists() }?.readText()
     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 15_000
         readTimeout = 15_000
@@ -180,11 +187,19 @@ internal fun download(url: String): ByteArray {
         // decode, so we decode the (always gzip-stored) body deterministically.
         setRequestProperty("Accept-Encoding", "gzip")
         setRequestProperty("User-Agent", USER_AGENT)
+        etag?.let { setRequestProperty("If-None-Match", it) }
     }
     try {
-        val raw = conn.inputStream
+        if (conn.responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
+            setLastModified(System.currentTimeMillis())
+            return
+        }
+        val raw = conn.inputStream   // throws on an HTTP error
         val stream = if (conn.contentEncoding.equals("gzip", ignoreCase = true)) GZIPInputStream(raw) else raw
-        return stream.use { it.readBytes() }
+        val bytes = stream.use { it.readBytes() }
+        etagFile.delete()   // never left pairing a new body with the old ETag
+        writeAtomically(bytes)
+        conn.getHeaderField("ETag")?.let { etagFile.writeText(it) }
     } finally {
         conn.disconnect()
     }

@@ -38,10 +38,12 @@ jobs:
 
       # Store objects gzip-compressed under their .json keys; the app sends
       # Accept-Encoding and S3 returns them with Content-Encoding: gzip.
+      # -n leaves the name/mtime out of the gzip header, so identical JSON gives
+      # identical bytes and an unchanged S3 ETag (the app revalidates with it).
       - name: Gzip in place
         run: |
           for f in out/manifest.json out/brigades.json out/lines/*.json; do
-            gzip -c "$f" > "$f.gz" && mv "$f.gz" "$f"
+            gzip -n -c "$f" > "$f.gz" && mv "$f.gz" "$f"
           done
 
       # app/ belongs to the release workflow; keep --delete off it.
