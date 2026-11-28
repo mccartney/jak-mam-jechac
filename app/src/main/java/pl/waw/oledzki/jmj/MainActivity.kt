@@ -30,6 +30,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -76,8 +77,11 @@ class MainActivity : ComponentActivity() {
                     // is undone before Back can leave the app.
                     BackHandler(enabled = dest != Dest.SLUZBA) { dest = Dest.entries[dest.ordinal - 1] }
 
+                    // Bumped by pull-to-refresh on the duty tab to ask Play for an update again.
+                    var updateChecks by rememberSaveable { mutableIntStateOf(0) }
+
                     Column(Modifier.padding(padding)) {
-                        UpdateBanner()
+                        UpdateBanner(updateChecks)
                         WelcomeGate {
                             val sel = selection.takeUnless { changing }
                             val leg = activeLeg.takeUnless { changing }
@@ -104,7 +108,7 @@ class MainActivity : ComponentActivity() {
                             Box(Modifier.fillMaxSize()) {
                                 when (dest) {
                                     // Picking a duty jumps to the run picker, resetting the run if the duty changed.
-                                    Dest.SLUZBA -> BrigadeSelectScreen(selection, onChanging = { changing = it }) {
+                                    Dest.SLUZBA -> BrigadeSelectScreen(selection, onChanging = { changing = it }, onRefresh = { updateChecks++ }) {
                                         if (it != selection) { activeLeg = null; legCount = null }
                                         selection = it; changing = false; dest = Dest.KURS
                                     }
