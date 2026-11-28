@@ -77,6 +77,7 @@ fun BrigadeSelectScreen(
     current: BrigadeSelection?,
     modifier: Modifier = Modifier,
     onChanging: (Boolean) -> Unit,
+    onRefresh: () -> Unit,
     onConfirm: (BrigadeSelection) -> Unit,
 ) {
     val context = LocalContext.current
@@ -109,10 +110,12 @@ fun BrigadeSelectScreen(
         }
     }
 
-    // Pull down past the top of the list to re-download the index; the form is left as it is.
+    // Pull down past the top of the list to re-download the index (and check for an app update);
+    // the form is left as it is.
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
     fun refresh() = scope.launch {
+        onRefresh()
         refreshing = true
         failed = false
         try {

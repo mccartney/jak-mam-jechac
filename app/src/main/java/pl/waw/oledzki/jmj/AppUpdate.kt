@@ -39,17 +39,18 @@ import kotlinx.coroutines.launch
  * Google Play's flexible in-app update, as a strip above the tabs: offer → download in the background
  * while the app keeps working → offer a restart. Nothing is forced; the restart only happens on tap,
  * so a driver mid-route is never interrupted. Shows nothing for installs not from Play (debug, sideload).
+ * Bumping [checks] (pull-to-refresh on the duty tab) asks Play again and re-offers a declined update.
  */
 @Composable
-fun UpdateBanner() {
+fun UpdateBanner(checks: Int) {
     val context = LocalContext.current
     val manager = remember { AppUpdateManagerFactory.create(context) }
-    val update by produceState<AppUpdateResult>(AppUpdateResult.NotAvailable) {
+    val update by produceState<AppUpdateResult>(AppUpdateResult.NotAvailable, checks) {
         manager.requestUpdateFlow().catch {}.collect { value = it }
     }
-    // One offer per app start: after the tap, Play's dialog either starts the download (progress events
-    // take over the strip) or is declined, and "No thanks" shouldn't nag again until the next start.
-    var offered by rememberSaveable { mutableStateOf(false) }
+    // One offer per app start (or manual check): after the tap, Play's dialog either starts the download
+    // (progress events take over the strip) or is declined, and "No thanks" shouldn't nag again on its own.
+    var offered by rememberSaveable(checks) { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(StartIntentSenderForResult()) {}
     val scope = rememberCoroutineScope()
 
